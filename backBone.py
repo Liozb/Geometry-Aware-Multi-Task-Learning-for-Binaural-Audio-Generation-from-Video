@@ -49,8 +49,8 @@ class FairPlayDataset(Dataset):
         self.frame_dir = frame_dir
         self.audio_length = 0.63            # the audio for each length is 0.63 sec
         self.audio_sampling_rate = 16000    # sampling rate for each audio
-        self.batch_size = 32
         self.enable_data_augmentation = True
+        self.nThreads = 16
         self.audios = []
 
         for file_name in os.listdir(audio_dir):
@@ -95,13 +95,30 @@ class FairPlayDataset(Dataset):
         audio_diff_spec = torch.FloatTensor(generate_spectrogram(audio_channel1 - audio_channel2))
         audio_mix_spec = torch.FloatTensor(generate_spectrogram(audio_channel1 + audio_channel2))
 
-        return {'frame': frame, 'audio_diff_spec':audio_diff_spec, 'audio_mix_spec':audio_mix_spec}
+        return {'frame': frame, 'audio_diff_spec': audio_diff_spec, 'audio_mix_spec': audio_mix_spec}
+
+
+frames_dir = "/dsi/gannot-lab/datasets2/FAIR-Play/frames_30fps/"
+audios_dir = "/dsi/gannot-lab/datasets2/FAIR-Play/binaural_audios/"
+batch_size = 32
+
+# define device as gpu
+fair_play_dataset = FairPlayDataset(audios_dir, frames_dir)
+fair_play_dataset.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
+data_loader = CustomDatasetDataLoader(fair_play_dataset)
+dataset = data_loader.load_data()
+
+# validation dataset
+data_loader_val = FairPlayDataset(audios_dir, frames_dir)
+data_loader_val.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+data_loader_val = CustomDatasetDataLoader(data_loader_val)
+dataset_val = data_loader_val.load_data()
 
 
 # call the frames data from the folders
 resnet18 = models.resnet18(pretrained=True)
-frames_dir = "/dsi/gannot-lab/datasets2/FAIR-Play/frames_30fps/"
-audios_dir = "/dsi/gannot-lab/datasets2/FAIR-Play/binaural_audios/"                 # check for real path
+             
 
 
 frames_dataset = datasets.ImageFolder(root=frames_path, transform=frame_transform)
@@ -113,16 +130,15 @@ audio_dataset = AudioVisualDataset(root_dir='path/to/root/directory', transform=
 # Create a DataLoader to load the audio files in batches
 audio_dataloader = DataLoader(audio_dataset, batch_size=32, shuffle=True)
 
-# define device as gpu
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+
 resnet18.eval()
 
-resnet18.to(device)
+resnet18.to(data_loader.device)
 
 # code start here
 with torch.no_grad():
     for images, _ in frames_loader:
-        images = images.to(device)
+        images = images.to(data_loader.device)
         outputs = resnet18(images)
         _, predicted = torch.max(outputs, 1)
         print(predicted)
