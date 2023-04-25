@@ -41,6 +41,8 @@ class AudioVisualDataset(Dataset):
         self.enable_data_augmentation = True
         self.nThreads = 16
         self.audios = []
+        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        self.mode = 'train'
 
         for file_name in os.listdir(audio_dir):
             file_path = os.path.join(audio_dir, file_name)
