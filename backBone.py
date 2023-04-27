@@ -13,8 +13,18 @@ data_loader = DataLoader(
             batch_size=batch_size,
             shuffle=True,
             num_workers=int(dataset.nThreads))
-print(dataset[15])
+data_15 = dataset[15]
+frame_15 = data_15['frame']
+audio_spec_15 = data_15['audio_diff_spec']
 
+
+librosa.display.specshow(audio_spec_15.numpy(), sr=dataset.audio_sampling_rate, x_axis='time', y_axis='hz')
+plt.colorbar()
+plt.show()
+
+
+plt.imshow(frame_15.permute(1,2,0).numpy())
+plt.show()
 
 # validation dataset
 val_dataset = AudioVisualDataset(audios_dir, frames_dir)

@@ -11,3 +11,4 @@ import os
 import librosa
 import random
 from PIL import Image, ImageEnhance
+import matplotlib.pyplot as plt
