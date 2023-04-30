@@ -1,7 +1,8 @@
 import sys
-sys.path.append('../')
+import os
+DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(DIR))
 from imports import *
-
 
 def generate_spectrogram(audio):
     spectro = librosa.core.stft(audio, n_fft=512, hop_length=160, win_length=400, center=True)
@@ -80,7 +81,7 @@ class AudioVisualDataset(Dataset):
         # get the closest frame to the audio segment
         frame_index = int(
             round(((audio_start_time + audio_end_time) / 2.0 + 0.05) * 10))  # 10 frames extracted per second
-        frame = process_image(Image.open(os.path.join(self.frame_dir, video_num, str(frame_index) + '.jpg')).convert('RGB'),
+        frame = process_image(Image.open(os.path.join(self.frame_dir, video_num, str(frame_index).zfill(3) + '.jpg')).convert('RGB'),
                               self.enable_data_augmentation)
         frame = self.vision_transform(frame)
 

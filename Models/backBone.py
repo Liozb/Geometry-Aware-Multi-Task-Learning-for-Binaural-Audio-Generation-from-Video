@@ -1,5 +1,7 @@
 import sys
-sys.path.append('../')
+import os
+DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(DIR))
 from imports import *
 from Datasets.AudioVisualDataset import AudioVisualDataset
 
