@@ -4,7 +4,7 @@ DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(DIR))
 from imports import *
 from Datasets.AudioVisualDataset import AudioVisualDataset
-from networks import unet
+from networks.unet import unet
 
 
 def debug_dataset(idx=15):
@@ -34,7 +34,7 @@ def debug_dataset(idx=15):
 
 frames_dir = "/dsi/gannot-lab/datasets2/FAIR-Play/frames_30fps/"
 audios_dir = "/dsi/gannot-lab/datasets2/FAIR-Play/binaural_audios/"
-batch_size = 32
+batch_size = 64
 
 # define device as gpu
 dataset = AudioVisualDataset(audios_dir, frames_dir)
@@ -60,7 +60,10 @@ resnet18 = models.resnet18(pretrained=True)
 
 #  remove the pooling and fully connected layers
 modules = list(resnet18.children())[:-2]
-resnet18 = nn.Sequential(*modules)
+visual_net = nn.Sequential(*modules)
+
+audio_net = AudioNet()
+audio_net.apply(weights_init)
 
 resnet18.eval()
 resnet18.to(dataset.device)
