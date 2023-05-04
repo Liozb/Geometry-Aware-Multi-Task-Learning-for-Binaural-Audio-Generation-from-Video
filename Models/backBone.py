@@ -4,7 +4,7 @@ DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(DIR))
 from imports import *
 from Datasets.AudioVisualDataset import AudioVisualDataset
-from networks.unet import unet
+from networks.unet import *
 
 
 def debug_dataset(idx=15):
