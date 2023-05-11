@@ -88,5 +88,8 @@ class AudioVisualDataset(Dataset):
         # passing the spectrogram of the difference
         audio_diff_spec = torch.FloatTensor(generate_spectrogram(audio_channel1 - audio_channel2))
         audio_mix_spec = torch.FloatTensor(generate_spectrogram(audio_channel1 + audio_channel2))
+        channel1_spec = torch.FloatTensor(generate_spectrogram(audio_channel1))
+        channel2_spec = torch.FloatTensor(generate_spectrogram(audio_channel2))
 
-        return {'frame': frame, 'audio_diff_spec': audio_diff_spec, 'audio_mix_spec': audio_mix_spec}
+        return {'frame': frame, 'audio_diff_spec': audio_diff_spec, 'audio_mix_spec': audio_mix_spec, 'channel1_spec': channel1_spec , 'channel2_spec': channel2_spec}
+    
