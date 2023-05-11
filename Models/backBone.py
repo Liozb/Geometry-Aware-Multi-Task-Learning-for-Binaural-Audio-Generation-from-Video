@@ -63,6 +63,7 @@ validation_freq = 100
 checkpoints_dir = "/dsi/bermanl1/CODE/checkpoints"
 learning_rate_decrease_itr = 10
 decay_factor = 0.94
+save_epoch_freq = 50
 
 # define device as gpu
 dataset = AudioVisualDataset(audios_dir, frames_dir)
@@ -173,8 +174,8 @@ for epoch in range(1, train_epochs):
 
     if(epoch % save_epoch_freq == 0):
         print('saving the model at the end of epoch %d, total_steps %d' % (epoch, total_steps))
-        torch.save(net_visual.state_dict(), os.path.join('.', checkpoints_dir, name, str(epoch) + '_visual.pth'))
-        torch.save(net_audio.state_dict(), os.path.join('.', checkpoints_dir, name, str(epoch) + '_audio.pth'))
+        torch.save(visual_net.state_dict(), os.path.join('.', checkpoints_dir, name, str(epoch) + '_visual.pth'))
+        torch.save(audio_net.state_dict(), os.path.join('.', checkpoints_dir, name, str(epoch) + '_audio.pth'))
 
     #decrease learning rate 6% every opt.learning_rate_decrease_itr epochs
     if(learning_rate_decrease_itr > 0 and epoch % learning_rate_decrease_itr == 0):
