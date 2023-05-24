@@ -1,11 +1,11 @@
 import sys
 import os
-from audioVisual_model import *
+from Models.backbone_model import *
 DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(DIR))
 from imports import *
 from Datasets.AudioVisualDataset import AudioVisualDataset
-from networks.networks import *
+from networks.Networks import *
 
 
 #used to display validation loss
@@ -65,13 +65,16 @@ learning_rate_decrease_itr = 10
 decay_factor = 0.94
 save_epoch_freq = 50
 
-# define device as gpu
+
 dataset = AudioVisualDataset(audios_dir, frames_dir)
 data_loader = DataLoader(
             dataset,
             batch_size=batch_size,
             shuffle=True,
             num_workers=int(dataset.nThreads))
+
+for batch in data_loader:
+    print(batch['frame'])
 
 
 # validation dataset
@@ -87,30 +90,29 @@ dataset.mode = 'train'
 # debug_dataset()
 
 from tensorboardX import SummaryWriter
-writer = SummaryWriter(comment=opt.name)
+writer = SummaryWriter(comment="backbone")
 
 # call the frames data from the folders
 resnet18 = models.resnet18(pretrained=True)
 visual_net = VisualNet(resnet18)
 
+
 audio_net = AudioNet()
 audio_net.apply(weights_init)
 
-nets = (visual_net,audio_net)
-
 # construct our audio-visual model
-model = AudioVisualModel(nets)
+backbone_model = BackboneModel(audio_net)
 if len(gpu_ids) > 0:
-    model = torch.nn.DataParallel(model, device_ids=gpu_ids)
+    backbone_model = torch.nn.DataParallel(backbone_model, device_ids=gpu_ids)
 else:
-    model = torch.nn.DataParallel(model)
+    backbone_model = torch.nn.DataParallel(backbone_model)
 
-model.to(dataset.device)
+backbone_model.to(dataset.device)
 
 
 param_groups = [{'params': visual_net.parameters(), 'lr': lr},
-                {'params': audio_net.parameters(), 'lr': lr}]
-optimizer = torch.optim.Adam(param_groups, betas=(beta1,0.999), weight_decay=weight_decay)
+                {'params': audio_net.parameters(), 'lr': lr}]   
+backbone_optimizer = torch.optim.Adam(param_groups, betas=(beta1,0.999), weight_decay=weight_decay)
 
 # set up loss function
 loss_criterion = torch.nn.MSELoss()
@@ -131,6 +133,10 @@ for epoch in range(1, train_epochs):
     for i, data in enumerate(data_loader):
         
         total_steps += batch_size
+        
+        # get visual features using resnet18
+        visual_feature = visual_net(Variable(data['frame'], requires_grad=False, volatile=False))
+        
 
         # forward pass
         model.zero_grad()

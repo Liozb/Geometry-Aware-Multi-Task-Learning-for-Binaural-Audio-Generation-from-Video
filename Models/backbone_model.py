@@ -5,24 +5,22 @@ from torch import optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
-class AudioVisualModel(torch.nn.Module):
-    def name(self):
-        return 'AudioVisualModel'
 
-    def __init__(self, nets):
-        super(AudioVisualModel, self).__init__()
+class BackboneModel(torch.nn.Module):
+    def __init__(self, audio_net):
+        super(BackboneModel, self).__init__()
         #initialize model
-        self.net_visual, self.net_audio = nets
+        self.net_audio = audio_net
+        self.name = "backbone"
 
-    def forward(self, input, volatile=False):
+    def forward(self, input, visual_feature, volatile=False):
         visual_input = input['frame']
         audio_diff = input['audio_diff_spec']
         audio_mix = input['audio_mix_spec']
-        audio_gt = Variable(audio_diff[:,:,:-1,:], requires_grad=False)
+        audio_gt = Variable(audio_diff[:,:,:-1,:], requires_grad=False)  # discarding the last time frame of the spectrogram(why?)
 
         input_spectrogram = Variable(audio_mix, requires_grad=False, volatile=volatile)
-        visual_feature = self.net_visual(Variable(visual_input, requires_grad=False, volatile=volatile))
-        mask_prediction = self.net_audio(input_spectrogram, visual_feature)
+        mask_prediction = self.net_audio(input_spectrogram, visual_feature, self.name)
 
         #complex masking to obtain the predicted spectrogram
         spectrogram_diff_real = input_spectrogram[:,0,:-1,:] * mask_prediction[:,0,:,:] - input_spectrogram[:,1,:-1,:] * mask_prediction[:,1,:,:]
