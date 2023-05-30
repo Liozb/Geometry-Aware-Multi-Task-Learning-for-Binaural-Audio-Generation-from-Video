@@ -14,7 +14,6 @@ class BackboneModel(torch.nn.Module):
         self.name = "backbone"
 
     def forward(self, input, visual_feature, volatile=False):
-        visual_input = input['frame']
         audio_diff = input['audio_diff_spec']
         audio_mix = input['audio_mix_spec']
         audio_gt = Variable(audio_diff[:,:,:-1,:], requires_grad=False)  # discarding the last time frame of the spectrogram(why?)
