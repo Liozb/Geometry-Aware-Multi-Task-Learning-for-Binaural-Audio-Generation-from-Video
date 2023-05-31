@@ -27,8 +27,8 @@ class modelBackbone(torch.nn.Module):
         binaural_spectrogram = torch.cat((spectrogram_diff_real.unsqueeze(1), spectrogram_diff_img.unsqueeze(1)), 1)
         
         # predicted channels
-        channel1_pred = input_spectrogram + (input_spectrogram*mask_prediction)/2
-        channel2_pred = input_spectrogram - (input_spectrogram*mask_prediction)/2
+        channel1_pred = input_spectrogram[:,:,:-1,:] + (input_spectrogram[:,:,:-1,:]*mask_prediction)/2
+        channel2_pred = input_spectrogram[:,:,:-1,:] - (input_spectrogram[:,:,:-1,:]*mask_prediction)/2
 
         output =  {'mask_prediction': mask_prediction, 'binaural_spectrogram': binaural_spectrogram, 'audio_gt': audio_gt, 'channel1_pred': channel1_pred, 'channel2_pred': channel2_pred}
         return output
