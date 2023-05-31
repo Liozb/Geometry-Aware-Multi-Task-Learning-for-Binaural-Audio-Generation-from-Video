@@ -35,7 +35,7 @@ def normalize(samples, desired_rms = 0.1, eps = 1e-4):
 
 
 class AudioVisualDataset(Dataset):
-    def __init__(self, audio_dir, frame_dir):
+    def __init__(self, audio_dir, frame_dir,gpu_avilibale):
         super(AudioVisualDataset, self).__init__()
         self.audio_dir = audio_dir
         self.frame_dir = frame_dir
@@ -44,7 +44,10 @@ class AudioVisualDataset(Dataset):
         self.enable_data_augmentation = True
         self.nThreads = 16
         self.audios = []
-        self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        if gpu_avilibale:
+            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+        else:
+            self.device = torch.device('cpu')
         self.mode = 'train'
 
         for file_name in os.listdir(audio_dir):

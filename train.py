@@ -48,6 +48,9 @@ def display_val(model, loss_criterion, writer, index, dataset_val):
     return avg_loss 
     
     
+gpu_avilibale = False
+if not gpu_avilibale:
+    os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
 frames_dir = "/dsi/gannot-lab/datasets2/FAIR-Play/frames_30fps/"
 audios_dir = "/dsi/gannot-lab/datasets2/FAIR-Play/binaural_audios/"
@@ -75,7 +78,7 @@ lambda_g = 0.01
 lambda_p = 1
 
 
-dataset = AudioVisualDataset(audios_dir, frames_dir)
+dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_avilibale)
 data_loader = DataLoader(
             dataset,
             batch_size=batch_size,
@@ -85,7 +88,7 @@ data_loader = DataLoader(
 
 # validation dataset
 dataset.mode = 'val'
-val_dataset = AudioVisualDataset(audios_dir, frames_dir)
+val_dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_avilibale)
 data_loader_val = DataLoader(
             val_dataset,
             batch_size=batch_size,
@@ -108,25 +111,30 @@ model_backbone = BackboneModel(audio_net)
 
 
 # use models with gpu
-model_backbone = torch.nn.DataParallel(model_backbone, device_ids=gpu_ids)
-model_backbone.to(dataset.device)
-
+if gpu_avilibale:
+    model_backbone = torch.nn.DataParallel(model_backbone, device_ids=gpu_ids)
+    model_backbone.to(dataset.device)
+else:
+    model_backbone.to('cpu')
+    
+     
 #define Adam optimzer
 param_backbone = [{'params': visual_net.parameters(), 'lr': backbone_lr},
                 {'params': audio_net.parameters(), 'lr': backbone_lr}]
-optimizer_resnet = torch.optim.Adam(visual_net.parameters(), lr, param_backbone, betas=(beta1,0.999), weight_decay=weight_decay)
+#optimizer_resnet = torch.optim.Adam(visual_net.parameters(), lr, param_backbone, betas=(beta1,0.999), weight_decay=weight_decay)
 optimizer_backbone = torch.optim.Adam(param_backbone, betas=(beta1,0.999), weight_decay=weight_decay)
 
 # set up loss function
 loss_criterion = torch.nn.MSELoss()
-if(len(gpu_ids) > 0):
+if(len(gpu_ids) > 0 and gpu_avilibale):
     loss_criterion.cuda(gpu_ids[0])
 
 batch_loss = []
 total_steps = 0
 
 for epoch in range(epochs):
-    torch.cuda.synchronize()
+    if gpu_avilibale:
+        torch.cuda.synchronize()
     for i, data in enumerate(data_loader):
         
                 total_steps += batch_size
@@ -136,7 +144,7 @@ for epoch in range(epochs):
                 model_backbone.zero_grad()
                 
                 visual_input = data['frame']
-                visual_feature = visual_net.forward(visual_input)
+                visual_feature = visual_net.forward(Variable(visual_input, requires_grad=False,volatile=False))
                 
                 output_backbone = model_backbone.forward(data, visual_feature)
 
@@ -153,12 +161,12 @@ for epoch in range(epochs):
                 batch_loss.append(loss.item())
 
                 # update optimizer
-                optimizer_resnet.zero_grad()
+                #optimizer_resnet.zero_grad()
                 optimizer_backbone.zero_grad()
                 
                 loss_backbone.backward()
                 
-                optimizer_resnet.step()
+                #optimizer_resnet.step()
                 optimizer_backbone.step()
 
 
@@ -180,7 +188,7 @@ for epoch in range(epochs):
                         model_backbone.eval()
                         dataset.mode = 'val'
                         print('Display validation results at (epoch %d, total_steps %d)' % (epoch, total_steps))
-                        val_err = display_val(model_backbone, loss_criterion, writer, total_steps, data_loader_val, opt)
+                        val_err = display_val(model_backbone, loss_criterion, writer, total_steps, data_loader_val)
                         print('end of display \n')
                         model_backbone.train()
                         dataset.mode = 'train'
