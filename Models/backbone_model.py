@@ -6,9 +6,9 @@ import torch.nn.functional as F
 from torch.autograd import Variable
 
 
-class BackboneModel(torch.nn.Module):
+class modelBackbone(torch.nn.Module):
     def __init__(self, audio_net):
-        super(BackboneModel, self).__init__()
+        super(modelBackbone, self).__init__()
         #initialize model
         self.net_audio = audio_net
         self.name = "backbone"
