@@ -1,5 +1,7 @@
 import sys
 import os
+import random
+
 DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(DIR))
 from imports import *
@@ -88,11 +90,18 @@ class AudioVisualDataset(Dataset):
                               self.enable_data_augmentation)
         frame = self.vision_transform(frame)
 
+        # get a frame 1 secend befor/after the original frame
+        delta = random.randrange(-1, 1, 2)
+        second_frame_index = frame_index + 30*delta  
+        second_frame = process_image(Image.open(os.path.join(self.frame_dir, video_num, str(second_frame_index).zfill(3) + '.jpg')).convert('RGB'),
+                              self.enable_data_augmentation)
+        second_frame = self.vision_transform(second_frame)
+        
         # passing the spectrogram of the difference
         audio_diff_spec = torch.FloatTensor(generate_spectrogram(audio_channel1 - audio_channel2))
         audio_mix_spec = torch.FloatTensor(generate_spectrogram(audio_channel1 + audio_channel2))
         channel1_spec = torch.FloatTensor(generate_spectrogram(audio_channel1))
         channel2_spec = torch.FloatTensor(generate_spectrogram(audio_channel2))
 
-        return {'frame': frame, 'audio_diff_spec': audio_diff_spec, 'audio_mix_spec': audio_mix_spec, 'channel1_spec': channel1_spec , 'channel2_spec': channel2_spec}
+        return {'frame': frame, 'second_frame': second_frame, 'audio_diff_spec': audio_diff_spec, 'audio_mix_spec': audio_mix_spec, 'channel1_spec': channel1_spec , 'channel2_spec': channel2_spec}
     

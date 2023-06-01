@@ -1,6 +1,8 @@
 # this code handles the train
-
 from Models.backbone_model import *
+from Models.geometry_model import *
+from Models.spatial_model import *
+from Models.rir_model import *
 from imports import * 
 from Datasets.AudioVisualDataset import AudioVisualDataset
 from networks.Networks import *
@@ -99,16 +101,26 @@ dataset.mode = 'train'
 from tensorboardX import SummaryWriter
 writer = SummaryWriter()
 
+
 # call the frames data from the folders
 resnet18 = models.resnet18(pretrained=True)
 visual_net = VisualNet(resnet18)
 
+# geomrteic consistency net
+geometric_visual = VisualNet(resnet18)
+
+# audio network for backbone
 audio_net = AudioNet()
 audio_net.apply(weights_init)
 
-# construct our models
-model_backbone = BackboneModel(audio_net)
+# generator net for rir
+generator = Generator()
+generator.apply(weights_init)
 
+
+# construct our models
+model_backbone = modelBackbone(audio_net)
+model_geometry = modelGeometry(geometric_visual)
 
 # use models with gpu
 if gpu_avilibale:
@@ -145,15 +157,16 @@ for epoch in range(epochs):
                 
                 visual_input = data['frame']
                 visual_feature = visual_net.forward(Variable(visual_input, requires_grad=False,volatile=False))
-                
                 output_backbone = model_backbone.forward(data, visual_feature)
-
+                geometric_visual = model_geometry.forward(data)
+                
 
                 # compute loss for each model
                 difference_loss = loss_criterion(output_backbone['binaural_spectrogram'], Variable(output_backbone['audio_gt'], requires_grad=False))
                 channel1_loss = loss_criterion(output_backbone['channel1_pred'], data['channel1_spec'])
                 channel2_loss = loss_criterion(output_backbone['channel2_pred'], data['channel2_spec'])
                 loss_backbone = difference_loss + channel1_loss + channel2_loss
+                loss_geometry = loss_criterion(visual_feature, geometric_visual)
                 
                 
                 # combine loss

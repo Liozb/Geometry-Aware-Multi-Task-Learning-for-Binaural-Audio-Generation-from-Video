@@ -7,7 +7,7 @@ from Models.backbone_model import *
 DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(DIR))
 from imports import *
-from Datasets.AudioVisualDataset import AudioVisualDataset
+
 class modelSpatial(torch.nn.Module):
     def __init__(self, audio_net):
         super(modelSpatial, self).__init__()
@@ -28,6 +28,7 @@ class modelSpatial(torch.nn.Module):
                 chanel1, chanel2 = chanel1, chanel2
             audio.append([chanel1,chanel2])
         audio_spectrogram = Variable(audio, requires_grad=False, volatile=volatile)
-        visualAudio = self.net_audio(audio_spectrogram, visual_feature, self.name)
-        output = {'visualAudio': visualAudio, 'c': c}                     
+        c_pred = self.net_audio(audio_spectrogram, visual_feature, self.name)
+        # need a fix with passing through a classifier 
+        output = {'c_pred': c_pred, 'c': c}                     
         return output

@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 import functools
+import torchaudio
+from torch.nn.init import kaiming_normal_, calculate_gain
 
 def unet_conv(input_nc, output_nc, norm_layer=nn.BatchNorm2d):
     downconv = nn.Conv2d(input_nc, output_nc, kernel_size=4, stride=2, padding=1)
@@ -35,6 +37,26 @@ def weights_init(m):
         m.bias.data.fill_(0)
     elif classname.find('Linear') != -1:
         m.weight.data.normal_(0.0, 0.02)
+        
+        
+class PixelWiseNormLayer(nn.Module):
+    def __init__(self):
+        super().__init__()
+
+    def forward(self, x):
+        return x/torch.sqrt(torch.mean(x ** 2, dim=1, keepdim=True) + 1e-8)
+
+class EqualizedLearningRateLayer(nn.Module):
+    def __init__(self, layer):
+        super().__init__()
+        self.layer_ = layer
+
+        kaiming_normal_(self.layer_.weight, a=calculate_gain("conv2d"))
+        self.layer_norm_constant_ = (torch.mean(self.layer_.weight.data ** 2)) ** 0.5
+        self.layer_.weight.data.copy_(self.layer_.weight.data / self.layer_norm_constant_)
+
+        self.bias_ = self.layer_.bias if self.layer_.bias else None
+        self.layer_.bias = None
 
 
 class VisualNet(nn.Module):
@@ -91,3 +113,89 @@ class AudioNet(nn.Module):
             mask_prediction = self.audionet_upconvlayer5(torch.cat((audio_upconv4feature, audio_conv1feature), dim=1)) * 2 - 1
             return mask_prediction
         
+        
+class Generator(nn.Module):
+    """Build non-progressive variant of GANSynth generator."""
+    def __init__(self, latent_size=512, mel_spec=False): # Encoder output should contain 2048 values
+        super().__init__()
+        self.latent_size = latent_size
+        self._mel_spec = mel_spec
+        self.build_model()
+        self.GL = torchaudio.transforms.GriffinLim(n_fft=446, hop_length=16, win_length=64)
+
+    def forward(self, x):
+        mag_spec = self.model(x)
+        # pred_wav = self.GL(mag_spec)
+        return mag_spec, None
+
+    def build_model(self):
+        model = []
+        # Input block
+        if self._mel_spec:
+            model.append(nn.Conv2d(self.latent_size, 256, kernel_size=(4, 2), stride=1, padding=2, bias=False))
+        else:
+            model.append(nn.Conv2d(self.latent_size, 256, kernel_size=(3, 8), stride=1, padding=(1,0), bias=False)) # Modified to k=8, p=7 for our image dimensions (i.e. 512x512)
+        model.append(EqualizedLearningRateLayer(model[-1]))
+        model.append(nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=False))
+        model.append(EqualizedLearningRateLayer(model[-1]))
+        model.append(nn.LeakyReLU(negative_slope=0.2))
+        model.append(PixelWiseNormLayer())
+        model.append(nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=False))
+        model.append(EqualizedLearningRateLayer(model[-1]))
+        model.append(nn.LeakyReLU(negative_slope=0.2))
+        model.append(PixelWiseNormLayer())
+        model.append(nn.Upsample(scale_factor=2, mode="nearest"))
+
+        model.append(nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=False))
+        model.append(EqualizedLearningRateLayer(model[-1]))
+        model.append(nn.LeakyReLU(negative_slope=0.2))
+        model.append(PixelWiseNormLayer())
+        model.append(nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=False))
+        model.append(EqualizedLearningRateLayer(model[-1]))
+        model.append(nn.LeakyReLU(negative_slope=0.2))
+        model.append(PixelWiseNormLayer())
+        model.append(nn.Upsample(scale_factor=2, mode="nearest"))
+
+        model.append(nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=False))
+        model.append(EqualizedLearningRateLayer(model[-1]))
+        model.append(nn.LeakyReLU(negative_slope=0.2))
+        model.append(PixelWiseNormLayer())
+        model.append(nn.Conv2d(256, 256, kernel_size=3, stride=1, padding=1, bias=False))
+        model.append(EqualizedLearningRateLayer(model[-1]))
+        model.append(nn.LeakyReLU(negative_slope=0.2))
+        model.append(PixelWiseNormLayer())
+        model.append(nn.Upsample(scale_factor=2, mode="nearest"))
+
+        model.append(nn.Conv2d(256, 128, kernel_size=3, stride=1, padding=1, bias=False))
+        model.append(EqualizedLearningRateLayer(model[-1]))
+        model.append(nn.LeakyReLU(negative_slope=0.2))
+        model.append(PixelWiseNormLayer())
+        model.append(nn.Conv2d(128, 128, kernel_size=3, stride=1, padding=1, bias=False))
+        model.append(EqualizedLearningRateLayer(model[-1]))
+        model.append(nn.LeakyReLU(negative_slope=0.2))
+        model.append(PixelWiseNormLayer())
+        model.append(nn.Upsample(scale_factor=2, mode="nearest"))
+
+        model.append(nn.Conv2d(128, 64, kernel_size=3, stride=1, padding=1, bias=False))
+        model.append(EqualizedLearningRateLayer(model[-1]))
+        model.append(nn.LeakyReLU(negative_slope=0.2))
+        model.append(PixelWiseNormLayer())
+        model.append(nn.Conv2d(64, 64, kernel_size=3, stride=1, padding=1, bias=False))
+        model.append(EqualizedLearningRateLayer(model[-1]))
+        model.append(nn.LeakyReLU(negative_slope=0.2))
+        model.append(PixelWiseNormLayer())
+        model.append(nn.Upsample(scale_factor=2, mode="nearest"))
+
+        model.append(nn.Conv2d(64, 32, kernel_size=3, stride=1, padding=1, bias=False))
+        model.append(EqualizedLearningRateLayer(model[-1]))
+        model.append(nn.LeakyReLU(negative_slope=0.2))
+        model.append(PixelWiseNormLayer())
+        model.append(nn.Conv2d(32, 32, kernel_size=3, stride=1, padding=1, bias=False))
+        model.append(EqualizedLearningRateLayer(model[-1]))
+        model.append(nn.LeakyReLU(negative_slope=0.2))
+        model.append(PixelWiseNormLayer())
+
+        model.append(nn.Conv2d(32, 2, kernel_size=1, stride=1, padding=0, bias=False))
+        model.append(EqualizedLearningRateLayer(model[-1]))
+        model.append(nn.ReLU())
+        self.model = nn.Sequential(*model)
