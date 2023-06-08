@@ -5,12 +5,19 @@ from torch import optim
 import torch.nn.functional as F
 from torch.autograd import Variable
 
+def get_spectrogram(input_spectrogram, mask_prediction):
+    spectrogram_diff_real = input_spectrogram[:,0,:-1,:] * mask_prediction[:,0,:,:] - input_spectrogram[:,1,:-1,:] * mask_prediction[:,1,:,:]
+    spectrogram_diff_img = input_spectrogram[:,0,:-1,:] * mask_prediction[:,1,:,:] + input_spectrogram[:,1,:-1,:] * mask_prediction[:,0,:,:]
+    binaural_spectrogram = torch.cat((spectrogram_diff_real.unsqueeze(1), spectrogram_diff_img.unsqueeze(1)), 1)
+
+    return binaural_spectrogram
+
 
 class modelBackbone(torch.nn.Module):
-    def __init__(self, audio_net):
+    def __init__(self, backbone_nets):
         super(modelBackbone, self).__init__()
         #initialize model
-        self.net_audio = audio_net
+        self.net_audio, self.net_fusion = backbone_nets
         self.name = "backbone"
 
     def forward(self, input, visual_feature, volatile=False):
@@ -19,16 +26,15 @@ class modelBackbone(torch.nn.Module):
         audio_gt = Variable(audio_diff[:,:,:-1,:], requires_grad=False)  # discarding the last time frame of the spectrogram(why?)
 
         input_spectrogram = Variable(audio_mix, requires_grad=False, volatile=volatile)
-        mask_prediction = self.net_audio(input_spectrogram, visual_feature, self.name)
+        mask_prediction, upfeatures = self.net_audio(input_spectrogram, visual_feature, self.name)
 
         #complex masking to obtain the predicted spectrogram
-        spectrogram_diff_real = input_spectrogram[:,0,:-1,:] * mask_prediction[:,0,:,:] - input_spectrogram[:,1,:-1,:] * mask_prediction[:,1,:,:]
-        spectrogram_diff_img = input_spectrogram[:,0,:-1,:] * mask_prediction[:,1,:,:] + input_spectrogram[:,1,:-1,:] * mask_prediction[:,0,:,:]
-        binaural_spectrogram = torch.cat((spectrogram_diff_real.unsqueeze(1), spectrogram_diff_img.unsqueeze(1)), 1)
+        binaural_spectrogram = get_spectrogram(input, mask_prediction)
         
         # predicted channels
-        channel1_pred = input_spectrogram[:,:,:-1,:] + (input_spectrogram[:,:,:-1,:]*mask_prediction)/2
-        channel2_pred = input_spectrogram[:,:,:-1,:] - (input_spectrogram[:,:,:-1,:]*mask_prediction)/2
+        pred_left_mask, pred_right_mask = self.net_fusion(visual_feature, upfeatures)
+        left_spectrogram = get_spectrogram(input, pred_left_mask)
+        right_spectrogram = get_spectrogram(input, pred_right_mask)
 
-        output =  {'mask_prediction': mask_prediction, 'binaural_spectrogram': binaural_spectrogram, 'audio_gt': audio_gt, 'channel1_pred': channel1_pred, 'channel2_pred': channel2_pred}
+        output =  {'mask_prediction': mask_prediction, 'binaural_spectrogram': binaural_spectrogram, 'audio_gt': audio_gt, 'left_spectrogram': left_spectrogram, 'right_spectrogram': right_spectrogram}
         return output

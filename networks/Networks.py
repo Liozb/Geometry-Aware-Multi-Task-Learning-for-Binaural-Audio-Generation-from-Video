@@ -123,7 +123,7 @@ class AudioNet(nn.Module):
         audio_conv5feature = self.audionet_convlayer5(audio_conv4feature)
 
         if model_name == 'spatial':
-            AVfusion_feature1 = fusion(audio_conv5feature, visual_feat_large)
+            AVfusion_feature1 = self.fusion(audio_conv5feature, visual_feat)
             pred = self.fc(self.flatten(self.conv1x1(AVfusion_feature1)))
             return pred
         
@@ -138,8 +138,44 @@ class AudioNet(nn.Module):
             audio_upconv2feature = self.audionet_upconvlayer2(torch.cat((audio_upconv1feature, audio_conv4feature), dim=1))
             audio_upconv3feature = self.audionet_upconvlayer3(torch.cat((audio_upconv2feature, audio_conv3feature), dim=1))
             audio_upconv4feature = self.audionet_upconvlayer4(torch.cat((audio_upconv3feature, audio_conv2feature), dim=1))
+            upfeatures = [audio_upconv1feature, audio_upconv2feature, audio_upconv3feature, audio_upconv4feature]
+            
             mask_prediction = self.audionet_upconvlayer5(torch.cat((audio_upconv4feature, audio_conv1feature), dim=1)) * 2 - 1
-            return mask_prediction
+            
+            return mask_prediction, upfeatures
+        
+
+class APNet(nn.Module):
+    def __init__(self, ngf=64, output_nc=2, visual_feat_size=7*14, vision_channel=512):
+        super().__init__()
+
+        norm_layer = nn.BatchNorm2d
+        self.fusion1 = AVFusionBlock(ngf * 8, vision_channel)
+        self.fusion2 = AVFusionBlock(ngf * 4, vision_channel)
+        self.fusion3 = AVFusionBlock(ngf * 2, vision_channel)
+        self.fusion4 = AVFusionBlock(ngf * 1, vision_channel)
+
+        self.fusion_upconv1 = unet_upconv(visual_feat_size, visual_feat_size, norm_layer=norm_layer)
+        self.fusion_upconv2 = unet_upconv(visual_feat_size * 2, visual_feat_size, norm_layer=norm_layer)
+        self.fusion_upconv3 = unet_upconv(visual_feat_size * 2, visual_feat_size, norm_layer=norm_layer)
+        self.lastconv_left = unet_upconv(visual_feat_size * 2, output_nc, outermost=True, norm_layer=norm_layer)
+        self.lastconv_right = unet_upconv(visual_feat_size * 2, output_nc, outermost=True, norm_layer=norm_layer)
+
+    def forward(self, visual_feat, upfeatures):
+        audio_upconv1feature, audio_upconv2feature, audio_upconv3feature, audio_upconv4feature = upfeatures
+        AVfusion_feature1 = self.fusion1(audio_upconv1feature, visual_feat)
+        AVfusion_feature1 = self.fusion_upconv1(AVfusion_feature1)
+        AVfusion_feature2 = self.fusion2(audio_upconv2feature, visual_feat)
+        AVfusion_feature2 = self.fusion_upconv2(torch.cat((AVfusion_feature2, AVfusion_feature1), dim=1))
+        AVfusion_feature3 = self.fusion3(audio_upconv3feature, visual_feat)
+        AVfusion_feature3 = self.fusion_upconv3(torch.cat((AVfusion_feature3, AVfusion_feature2), dim=1))
+        AVfusion_feature4 = self.fusion4(audio_upconv4feature, visual_feat)
+        AVfusion_feature4 = torch.cat((AVfusion_feature4, AVfusion_feature3), dim=1)
+        
+        pred_left_mask = self.lastconv_left(AVfusion_feature4) * 2 - 1
+        pred_right_mask = self.lastconv_right(AVfusion_feature4) * 2 - 1
+
+        return pred_left_mask, pred_right_mask
         
         
 class Generator(nn.Module):

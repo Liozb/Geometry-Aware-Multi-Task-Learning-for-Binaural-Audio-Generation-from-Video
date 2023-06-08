@@ -50,7 +50,7 @@ def display_val(model, loss_criterion, writer, index, dataset_val):
     return avg_loss 
     
     
-gpu_avilibale = False
+gpu_avilibale = True
 if not gpu_avilibale:
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
@@ -60,7 +60,7 @@ batch_size = 64
 epochs = 1000
 gpu_ids = [0,1]
 lr = 1e-4
-backbone_lr = 1e-3 
+lr_fusion = 1e-3 
 beta1 = 0.9
 weight_decay = 0.0005 # use for regolization
 train_epochs = 1000
@@ -102,42 +102,60 @@ dataset.mode = 'train'
 from tensorboardX import SummaryWriter
 writer = SummaryWriter()
 
-
-# call the frames data from the folders
+## build nets
+# resnet18 main net in our code
 resnet18 = models.resnet18(pretrained=True)
 visual_net = VisualNet(resnet18)
 
-# geomrteic consistency net
+# geometric consistency net
 geometric_visual = VisualNet(resnet18)
+
+# spatial coherence net
+spatial_net = AudioNet()
+spatial_net.apply(weights_init)
 
 # audio network for backbone
 audio_net = AudioNet()
 audio_net.apply(weights_init)
 
-# generator net for rir
+# fusion network for backbone
+fusion_net = APNet()
+fusion_net.apply(weights_init)
+
+# generator net for rir (Not used for FairPlay dataset)
 generator = Generator()
 generator.apply(weights_init)
 
+backbone_nets = (audio_net, fusion_net)
 
 # construct our models
-model_backbone = modelBackbone(audio_net)
+model_backbone = modelBackbone(backbone_nets)
+model_spatial = modelSpatial(spatial_net)
 
 # use models with gpu
 if gpu_avilibale:
     model_backbone = torch.nn.DataParallel(model_backbone, device_ids=gpu_ids)
     model_backbone.to(dataset.device)
+    
+    model_spatial = torch.nn.DataParallel(modelSpatial, device_ids=gpu_ids)
+    model_spatial.to(dataset.device)
 else:
     model_backbone.to('cpu')
+    model_spatial.to('cpu')
     
      
 #define Adam optimzer
-param_backbone = [{'params': visual_net.parameters(), 'lr': backbone_lr},
-                {'params': audio_net.parameters(), 'lr': backbone_lr}]
+param_backbone = [{'params': visual_net.parameters(), 'lr': lr},
+                {'params': audio_net.parameters(), 'lr': lr},
+                {'params': fusion_net.parameters(), 'lr': lr_fusion},
+                {'params': geometric_visual.parameters(), 'lr': lr},
+                {'params': spatial_net.parameters(), 'lr': lr}]
 #optimizer_resnet = torch.optim.Adam(visual_net.parameters(), lr, param_backbone, betas=(beta1,0.999), weight_decay=weight_decay)
-optimizer_backbone = torch.optim.Adam(param_backbone, betas=(beta1,0.999), weight_decay=weight_decay)
+optimizer = torch.optim.Adam(param_backbone, betas=(beta1,0.999), weight_decay=weight_decay)
 
 # set up loss function
 loss_criterion = torch.nn.MSELoss()
+spatial_loss_criterion = torch.nn.BCELoss()
 if(len(gpu_ids) > 0 and gpu_avilibale):
     loss_criterion.cuda(gpu_ids[0])
 
@@ -151,41 +169,55 @@ for epoch in range(epochs):
         
                 total_steps += batch_size
 
-                # forward pass
+                ## forward pass
+                # zero grad
                 visual_net.zero_grad()
                 model_backbone.zero_grad()
+                geometric_visual.zero_grad()
                 
+                # visual forward
                 visual_input = data['frame']
                 visual_feature = visual_net.forward(visual_input)
+                
+                # backbone forward
                 output_backbone = model_backbone.forward(data, visual_feature)
                 
+                # geometric consistency forward 
                 second_visual_input = data['second_frame']
                 second_visual_feature = geometric_visual.forward(second_visual_input)
                 
+                # spatial coherence forward
+                output_spatial = model_spatial(data, visual_feature)
                 
 
-                # compute loss for each model
+                ## compute loss for each model
+                # backbone loss
                 difference_loss = loss_criterion(output_backbone['binaural_spectrogram'], Variable(output_backbone['audio_gt'], requires_grad=False))
-                channel1_loss = loss_criterion(output_backbone['channel1_pred'], data['channel1_spec'])
-                channel2_loss = loss_criterion(output_backbone['channel2_pred'], data['channel2_spec'])
+                channel1_loss = loss_criterion(output_backbone['left_spectrogram'], data['channel1_spec'])
+                channel2_loss = loss_criterion(output_backbone['right_spectrogram'], data['channel2_spec'])
                 loss_backbone = difference_loss + channel1_loss + channel2_loss
                 
+                # geometric consistency loss
                 mse_geometry = loss_criterion(visual_feature, second_visual_feature) 
                 loss_geometry = np.max(mse_geometry - alpha, 0)
                 
+                # spatial coherence loss
+                c = output_spatial['c']
+                c_pred = output_spatial['c_pred']
+                loss_spatial = spatial_loss_criterion(c, c_pred)
                 
                 # combine loss
-                loss = lambda_b * loss_backbone + lambda_g * loss_geometry
+                loss = lambda_b * loss_backbone + lambda_g * loss_geometry + lambda_s * loss_spatial
                 batch_loss.append(loss.item())
 
                 # update optimizer
                 #optimizer_resnet.zero_grad()
-                optimizer_backbone.zero_grad()
+                optimizer.zero_grad()
                 
-                loss_backbone.backward()
+                loss.backward()
                 
                 #optimizer_resnet.step()
-                optimizer_backbone.step()
+                optimizer.step()
 
 
 
