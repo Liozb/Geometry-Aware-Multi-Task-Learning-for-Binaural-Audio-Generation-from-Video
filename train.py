@@ -67,6 +67,7 @@ train_epochs = 1000
 checkpoints_dir = "/dsi/bermanl1/CODE/checkpoints"
 learning_rate_decrease_itr = 10
 decay_factor = 0.94
+alpha = 0
 
 display_freq = 50     #display_freq batches the training progress 
 save_epoch_freq = 50
@@ -120,7 +121,6 @@ generator.apply(weights_init)
 
 # construct our models
 model_backbone = modelBackbone(audio_net)
-model_geometry = modelGeometry(geometric_visual)
 
 # use models with gpu
 if gpu_avilibale:
@@ -156,9 +156,12 @@ for epoch in range(epochs):
                 model_backbone.zero_grad()
                 
                 visual_input = data['frame']
-                visual_feature = visual_net.forward(Variable(visual_input, requires_grad=False,volatile=False))
+                visual_feature = visual_net.forward(visual_input)
                 output_backbone = model_backbone.forward(data, visual_feature)
-                geometric_visual = model_geometry.forward(data)
+                
+                second_visual_input = data['second_frame']
+                second_visual_feature = geometric_visual.forward(second_visual_input)
+                
                 
 
                 # compute loss for each model
@@ -166,11 +169,13 @@ for epoch in range(epochs):
                 channel1_loss = loss_criterion(output_backbone['channel1_pred'], data['channel1_spec'])
                 channel2_loss = loss_criterion(output_backbone['channel2_pred'], data['channel2_spec'])
                 loss_backbone = difference_loss + channel1_loss + channel2_loss
-                loss_geometry = loss_criterion(visual_feature, geometric_visual)
+                
+                mse_geometry = loss_criterion(visual_feature, second_visual_feature) 
+                loss_geometry = np.max(mse_geometry - alpha, 0)
                 
                 
                 # combine loss
-                loss = lambda_b * loss_backbone
+                loss = lambda_b * loss_backbone + lambda_g * loss_geometry
                 batch_loss.append(loss.item())
 
                 # update optimizer
