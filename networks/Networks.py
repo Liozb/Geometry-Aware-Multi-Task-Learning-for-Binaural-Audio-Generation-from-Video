@@ -71,6 +71,27 @@ class VisualNet(nn.Module):
         return x
 
 
+class AVFusionBlock(nn.Module):
+    def __init__(self, audio_channel, vision_channel=512):
+        super().__init__()
+        self.channel_mapping_conv_w = nn.Conv1d(vision_channel, audio_channel, kernel_size=1)
+        self.channel_mapping_conv_b = nn.Conv1d(vision_channel, audio_channel, kernel_size=1)
+        self.activation = nn.ReLU()
+
+    def forward(self, audiomap, visionmap):
+        visionmap = visionmap.view(visionmap.size(0), visionmap.size(1), -1)
+        vision_W = self.channel_mapping_conv_w(visionmap)
+        vision_W = self.activation(vision_W)
+        (bz, c, wh) = vision_W.size()
+
+        vision_W = vision_W.view(bz, c, wh)
+
+        vision_W = vision_W.transpose(2, 1)
+        audio_size = audiomap.size()
+        output = torch.bmm(vision_W, audiomap.view(bz, audio_size[1], -1)).view(bz, wh, *audio_size[2:])
+        return output
+
+
 class AudioNet(nn.Module):
     def __init__(self, ngf=64, input_nc=2, output_nc=2):
         super(AudioNet, self).__init__()
@@ -89,6 +110,10 @@ class AudioNet(nn.Module):
         self.audionet_upconvlayer4 = unet_upconv(ngf * 4, ngf)
         self.audionet_upconvlayer5 = unet_upconv(ngf * 2, output_nc, True) #outermost layer use a sigmoid to bound the mask
         
+        self.fusion = AVFusionBlock(ngf * 8, 512)
+        self.conv1x1_spatial = create_conv(98, 32, 1, 0) 
+        self.flatten = nn.Flatten()
+        self.fc = nn.Linear(512, 1)
 
     def forward(self, x, visual_feat, model_name):
         audio_conv1feature = self.audionet_convlayer1(x)
@@ -97,15 +122,18 @@ class AudioNet(nn.Module):
         audio_conv4feature = self.audionet_convlayer4(audio_conv3feature)
         audio_conv5feature = self.audionet_convlayer5(audio_conv4feature)
 
-        visual_feat = self.conv1x1(visual_feat)
-        visual_feat = visual_feat.view(visual_feat.shape[0], -1, 1, 1) #flatten visual feature
-        visual_feat = visual_feat.repeat(1, 1, audio_conv5feature.shape[-2], audio_conv5feature.shape[-1]) #tile visual feature
-        
-        audioVisual_feature = torch.cat((visual_feat, audio_conv5feature), dim=1)
         if model_name == 'spatial':
-            return audioVisual_feature
+            AVfusion_feature1 = fusion(audio_conv5feature, visual_feat_large)
+            pred = self.fc(self.flatten(self.conv1x1(AVfusion_feature1)))
+            return pred
         
-        elif model_name == 'backbone':    
+        elif model_name == 'backbone': 
+            
+            visual_feat = self.conv1x1(visual_feat)
+            visual_feat = visual_feat.view(visual_feat.shape[0], -1, 1, 1) #flatten visual feature
+            visual_feat = visual_feat.repeat(1, 1, audio_conv5feature.shape[-2], audio_conv5feature.shape[-1]) #tile visual feature
+            
+            audioVisual_feature = torch.cat((visual_feat, audio_conv5feature), dim=1)   
             audio_upconv1feature = self.audionet_upconvlayer1(audioVisual_feature)
             audio_upconv2feature = self.audionet_upconvlayer2(torch.cat((audio_upconv1feature, audio_conv4feature), dim=1))
             audio_upconv3feature = self.audionet_upconvlayer3(torch.cat((audio_upconv2feature, audio_conv3feature), dim=1))
