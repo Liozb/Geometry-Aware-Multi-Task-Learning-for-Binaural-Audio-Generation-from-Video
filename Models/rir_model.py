@@ -1,3 +1,6 @@
+# we dont use this model in FairPlay dataset
+# so ignor for now
+
 import sys
 import os
 from Models.backbone_model import *
