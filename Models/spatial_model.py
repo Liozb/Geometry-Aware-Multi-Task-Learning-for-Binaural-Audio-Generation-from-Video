@@ -18,9 +18,11 @@ class modelSpatial(torch.nn.Module):
     def forward(self, input, visual_feature):
         c = []
         audio = []
-        for i, data in enumerate(input):
-            chanel1 = data['chanel1_spec']
-            chanel2 = data['chanel2_spec']
+        channel1_spec = input['channel1_spec']
+        channel2_spec = input['channel2_spec']
+        for i in range(64):
+            chanel1 = channel1_spec[i,:,:,:]
+            chanel2 = channel2_spec[i,:,:,:]
             x = random.randint(0,1)
             if x == 1:
                 chanel1, chanel2 = chanel2, chanel1

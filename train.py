@@ -134,7 +134,7 @@ if gpu_avilibale:
     model_backbone = torch.nn.DataParallel(model_backbone, device_ids=gpu_ids)
     model_backbone.to(dataset.device)
     
-    model_spatial = torch.nn.DataParallel(modelSpatial, device_ids=gpu_ids)
+    model_spatial = torch.nn.DataParallel(model_spatial, device_ids=gpu_ids)
     model_spatial.to(dataset.device)
 else:
     model_backbone.to('cpu')
@@ -169,7 +169,8 @@ for epoch in range(epochs):
                 # zero grad
                 visual_net.zero_grad()
                 model_backbone.zero_grad()
-                
+                spatial_net.zero_grad()
+
                 # visual forward
                 visual_input = data['frame']
                 visual_feature = visual_net.forward(visual_input)

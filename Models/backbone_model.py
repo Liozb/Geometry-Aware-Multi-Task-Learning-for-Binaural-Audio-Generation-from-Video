@@ -29,12 +29,12 @@ class modelBackbone(torch.nn.Module):
         mask_prediction, upfeatures = self.net_audio(input_spectrogram, visual_feature, self.name)
 
         #complex masking to obtain the predicted spectrogram
-        binaural_spectrogram = get_spectrogram(input, mask_prediction)
+        binaural_spectrogram = get_spectrogram(input_spectrogram, mask_prediction)
         
         # predicted channels
         pred_left_mask, pred_right_mask = self.net_fusion(visual_feature, upfeatures)
-        left_spectrogram = get_spectrogram(input, pred_left_mask)
-        right_spectrogram = get_spectrogram(input, pred_right_mask)
+        left_spectrogram = get_spectrogram(input_spectrogram, pred_left_mask)
+        right_spectrogram = get_spectrogram(input_spectrogram, pred_right_mask)
 
         output =  {'mask_prediction': mask_prediction, 'binaural_spectrogram': binaural_spectrogram, 'audio_gt': audio_gt, 'left_spectrogram': left_spectrogram, 'right_spectrogram': right_spectrogram}
         return output

@@ -91,8 +91,10 @@ class AudioVisualDataset(Dataset):
         frame = self.vision_transform(frame)
 
         # get a frame 1 secend befor/after the original frame
-        delta = random.randrange(-1, 1, 2)
-        second_frame_index = frame_index + 30*delta  
+        delta = random.uniform(-1, 1)
+        second_frame_index = int(np.round(frame_index + 10*delta)) 
+        if second_frame_index <= 0:
+            second_frame_index = int(np.round(frame_index + 10*abs(delta)))
         second_frame = process_image(Image.open(os.path.join(self.frame_dir, video_num, str(second_frame_index).zfill(3) + '.jpg')).convert('RGB'),
                               self.enable_data_augmentation)
         second_frame = self.vision_transform(second_frame)
