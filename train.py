@@ -54,13 +54,13 @@ gpu_avilibale = True
 if not gpu_avilibale:
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
 
-frames_dir = "/dsi/gannot-lab/datasets2/FAIR-Play/frames_30fps/"
-audios_dir = "/dsi/gannot-lab/datasets2/FAIR-Play/binaural_audios/"
+frames_dir = "/dsi/gannot-lab2/datasets2/FAIR-Play/frames_30fps/"
+audios_dir = "/dsi/gannot-lab2/datasets2/FAIR-Play/binaural_audios/"
 batch_size = 64
 epochs = 1000
 gpu_ids = [0,1]
 lr = 1e-4
-lr_fusion = 1e-3 
+lr_big = 1e-3 
 beta1 = 0.9
 weight_decay = 0.0005 # use for regolization
 train_epochs = 1000
@@ -107,9 +107,6 @@ writer = SummaryWriter()
 resnet18 = models.resnet18(pretrained=True)
 visual_net = VisualNet(resnet18)
 
-# geometric consistency net
-geometric_visual = VisualNet(resnet18)
-
 # spatial coherence net
 spatial_net = AudioNet()
 spatial_net.apply(weights_init)
@@ -146,9 +143,8 @@ else:
      
 #define Adam optimzer
 param_backbone = [{'params': visual_net.parameters(), 'lr': lr},
-                {'params': audio_net.parameters(), 'lr': lr},
-                {'params': fusion_net.parameters(), 'lr': lr_fusion},
-                {'params': geometric_visual.parameters(), 'lr': lr},
+                {'params': audio_net.parameters(), 'lr': lr_big},
+                {'params': fusion_net.parameters(), 'lr': lr_big},
                 {'params': spatial_net.parameters(), 'lr': lr}]
 #optimizer_resnet = torch.optim.Adam(visual_net.parameters(), lr, param_backbone, betas=(beta1,0.999), weight_decay=weight_decay)
 optimizer = torch.optim.Adam(param_backbone, betas=(beta1,0.999), weight_decay=weight_decay)
@@ -173,7 +169,6 @@ for epoch in range(epochs):
                 # zero grad
                 visual_net.zero_grad()
                 model_backbone.zero_grad()
-                geometric_visual.zero_grad()
                 
                 # visual forward
                 visual_input = data['frame']
@@ -184,7 +179,7 @@ for epoch in range(epochs):
                 
                 # geometric consistency forward 
                 second_visual_input = data['second_frame']
-                second_visual_feature = geometric_visual.forward(second_visual_input)
+                second_visual_feature = visual_net.forward(second_visual_input)
                 
                 # spatial coherence forward
                 output_spatial = model_spatial(data, visual_feature)
