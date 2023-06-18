@@ -124,7 +124,7 @@ class AudioNet(nn.Module):
 
         if model_name == 'spatial':
             AVfusion_feature1 = self.fusion(audio_conv5feature, visual_feat)
-            pred = self.fc(self.flatten(self.conv1x1(AVfusion_feature1)))
+            pred = self.fc(self.flatten(self.conv1x1_spatial(AVfusion_feature1)))
             return pred
         
         elif model_name == 'backbone': 

@@ -58,7 +58,7 @@ frames_dir = "/dsi/gannot-lab2/datasets2/FAIR-Play/frames_30fps/"
 audios_dir = "/dsi/gannot-lab2/datasets2/FAIR-Play/binaural_audios/"
 batch_size = 64
 epochs = 1000
-gpu_ids = [0,1]
+gpu_ids = [0,1,2,3]
 lr = 1e-4
 lr_big = 1e-3 
 beta1 = 0.9
@@ -108,7 +108,7 @@ resnet18 = models.resnet18(pretrained=True)
 visual_net = VisualNet(resnet18)
 
 # spatial coherence net
-spatial_net = AudioNet()
+spatial_net = AudioNet(input_nc=4)
 spatial_net.apply(weights_init)
 
 # audio network for backbone
@@ -131,6 +131,9 @@ model_spatial = modelSpatial(spatial_net)
 
 # use models with gpu
 if gpu_avilibale:
+    visual_net = torch.nn.DataParallel(visual_net, device_ids=gpu_ids)
+    visual_net.to(dataset.device)
+    
     model_backbone = torch.nn.DataParallel(model_backbone, device_ids=gpu_ids)
     model_backbone.to(dataset.device)
     
@@ -139,6 +142,13 @@ if gpu_avilibale:
 else:
     model_backbone.to('cpu')
     model_spatial.to('cpu')
+    
+sum_v = sum([p.numel() for p in visual_net.parameters() if p.requires_grad])
+sum_a = sum([p.numel() for p in audio_net.parameters() if p.requires_grad])
+sum_f = sum([p.numel() for p in fusion_net.parameters() if p.requires_grad])
+sum_s = sum([p.numel() for p in spatial_net.parameters() if p.requires_grad])
+sum = sum_v + sum_a + sum_f + sum_s
+print("the number of parametrs is:",sum)
     
      
 #define Adam optimzer
@@ -172,7 +182,7 @@ for epoch in range(epochs):
                 spatial_net.zero_grad()
 
                 # visual forward
-                visual_input = data['frame']
+                visual_input = data['frame'].to(dataset.device)
                 visual_feature = visual_net.forward(visual_input)
                 
                 # backbone forward
@@ -189,8 +199,8 @@ for epoch in range(epochs):
                 ## compute loss for each model
                 # backbone loss
                 difference_loss = loss_criterion(output_backbone['binaural_spectrogram'], Variable(output_backbone['audio_gt'], requires_grad=False))
-                channel1_loss = loss_criterion(output_backbone['left_spectrogram'], data['channel1_spec'])
-                channel2_loss = loss_criterion(output_backbone['right_spectrogram'], data['channel2_spec'])
+                channel1_loss = loss_criterion(output_backbone['left_spectrogram'], data['channel1_spec'][:,:,:-1,:])
+                channel2_loss = loss_criterion(output_backbone['right_spectrogram'], data['channel2_spec'][:,:,:-1,:])
                 loss_backbone = difference_loss + channel1_loss + channel2_loss
                 
                 # geometric consistency loss
