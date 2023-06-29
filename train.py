@@ -3,6 +3,7 @@ from Models.backbone_model import *
 from Models.geometry_model import *
 from Models.spatial_model import *
 from Models.rir_model import *
+from Models.model import *
 from imports import * 
 from Datasets.AudioVisualDataset import AudioVisualDataset
 from networks.Networks import *
@@ -123,31 +124,21 @@ fusion_net.apply(weights_init)
 generator = Generator()
 generator.apply(weights_init)
 
-backbone_nets = (audio_net, fusion_net)
+nets = (visual_net, spatial_net, audio_net, fusion_net, generator)
 
 # construct our models
-model_backbone = modelBackbone(backbone_nets)
-model_spatial = modelSpatial(spatial_net)
+model = model(nets)
 
 # use models with gpu
 if gpu_avilibale:
-    visual_net = torch.nn.DataParallel(visual_net, device_ids=gpu_ids)
-    visual_net.to(dataset.device)
+    model = torch.nn.DataParallel(model, device_ids=gpu_ids)
+    model.to(dataset.device)
     
-    model_backbone = torch.nn.DataParallel(model_backbone, device_ids=gpu_ids)
-    model_backbone.to(dataset.device)
-    
-    model_spatial = torch.nn.DataParallel(model_spatial, device_ids=gpu_ids)
-    model_spatial.to(dataset.device)
 else:
-    model_backbone.to('cpu')
-    model_spatial.to('cpu')
+    model.to('cpu')
     
-sum_v = sum([p.numel() for p in visual_net.parameters() if p.requires_grad])
-sum_a = sum([p.numel() for p in audio_net.parameters() if p.requires_grad])
-sum_f = sum([p.numel() for p in fusion_net.parameters() if p.requires_grad])
-sum_s = sum([p.numel() for p in spatial_net.parameters() if p.requires_grad])
-sum = sum_v + sum_a + sum_f + sum_s
+sum = sum([p.numel() for p in model.parameters() if p.requires_grad])
+
 print("the number of parametrs is:",sum)
     
      
@@ -177,39 +168,26 @@ for epoch in range(epochs):
 
                 ## forward pass
                 # zero grad
-                visual_net.zero_grad()
-                model_backbone.zero_grad()
-                spatial_net.zero_grad()
-
-                # visual forward
-                visual_input = data['frame'].to(dataset.device)
-                visual_feature = visual_net.forward(visual_input)
+                optimizer.zero_grad()
                 
-                # backbone forward
-                output_backbone = model_backbone.forward(data, visual_feature)
-                
-                # geometric consistency forward 
-                second_visual_input = data['second_frame']
-                second_visual_feature = visual_net.forward(second_visual_input)
-                
-                # spatial coherence forward
-                output_spatial = model_spatial(data, visual_feature)
-                
+                output = model(data)
+               
 
                 ## compute loss for each model
                 # backbone loss
-                difference_loss = loss_criterion(output_backbone['binaural_spectrogram'], Variable(output_backbone['audio_gt'], requires_grad=False))
-                channel1_loss = loss_criterion(output_backbone['left_spectrogram'], data['channel1_spec'][:,:,:-1,:])
-                channel2_loss = loss_criterion(output_backbone['right_spectrogram'], data['channel2_spec'][:,:,:-1,:])
+                
+                difference_loss = loss_criterion(output['binaural_spectrogram'], Variable(output['audio_gt'], requires_grad=False))
+                channel1_loss = loss_criterion(output['left_spectrogram'], data['channel1_spec'][:,:,:-1,:])
+                channel2_loss = loss_criterion(output['right_spectrogram'], data['channel2_spec'][:,:,:-1,:])
                 loss_backbone = difference_loss + channel1_loss + channel2_loss
                 
                 # geometric consistency loss
-                mse_geometry = loss_criterion(visual_feature, second_visual_feature) 
+                mse_geometry = loss_criterion(output['visual_feature'], output['second_visual_feature']) 
                 loss_geometry = np.max(mse_geometry - alpha, 0)
                 
                 # spatial coherence loss
-                c = output_spatial['c']
-                c_pred = output_spatial['c_pred']
+                c = output['c']
+                c_pred = output['c_pred']
                 loss_spatial = spatial_loss_criterion(c, c_pred)
                 
                 # combine loss
@@ -241,12 +219,12 @@ for epoch in range(epochs):
                         torch.save(audio_net.state_dict(), os.path.join('.', checkpoints_dir, 'audio_latest.pth'))
 
                 if(i % validation_freq == 0):
-                        model_backbone.eval()
+                        model.eval()
                         dataset.mode = 'val'
                         print('Display validation results at (epoch %d, total_steps %d)' % (epoch, total_steps))
-                        val_err = display_val(model_backbone, loss_criterion, writer, total_steps, data_loader_val)
+                        val_err = display_val(model, loss_criterion, writer, total_steps, data_loader_val)
                         print('end of display \n')
-                        model_backbone.train()
+                        model.train()
                         dataset.mode = 'train'
                         #save the model that achieves the smallest validation error
                         if val_err < best_err:
