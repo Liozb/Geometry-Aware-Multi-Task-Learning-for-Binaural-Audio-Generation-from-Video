@@ -7,6 +7,7 @@ from Models.model import *
 from imports import * 
 from Datasets.AudioVisualDataset import AudioVisualDataset
 from networks.Networks import *
+from params import *
 
 
 def debug_dataset(dataset, idx=15):
@@ -50,132 +51,112 @@ def display_val(model, loss_criterion, writer, index, dataset_val):
     
     return avg_loss 
     
+
+if __name__ == '__main__':
+    dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_avilibale)
+    data_loader = DataLoader(
+                dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                num_workers=int(dataset.nThreads))
+
+
+        # validation dataset
+    dataset.mode = 'val'
+    val_dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_avilibale,  'val')
+    data_loader_val = DataLoader(
+                val_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                num_workers=int(val_dataset.nThreads))
+    dataset.mode = 'train'
     
-gpu_avilibale = True
-if not gpu_avilibale:
-    os.environ["CUDA_VISIBLE_DEVICES"] = ""
-
-frames_dir = "/dsi/gannot-lab2/datasets2/FAIR-Play/frames_30fps/"
-audios_dir = "/dsi/gannot-lab2/datasets2/FAIR-Play/binaural_audios/"
-batch_size = 64
-epochs = 1000
-gpu_ids = [0,1,2,3]
-lr = 1e-4
-lr_big = 1e-3 
-beta1 = 0.9
-weight_decay = 0.0005 # use for regolization
-train_epochs = 1000
-checkpoints_dir = "/dsi/bermanl1/CODE/checkpoints"
-learning_rate_decrease_itr = 10
-decay_factor = 0.94
-alpha = 0
-
-display_freq = 50     #display_freq batches the training progress 
-save_epoch_freq = 50
-save_latest_freq = 5000
-validation_freq = 100
-
-# weights of loss
-lambda_b = 10
-lambda_s = 1
-lambda_g = 0.01
-lambda_p = 1
-
-
-dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_avilibale)
-data_loader = DataLoader(
-            dataset,
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=int(dataset.nThreads))
-
-
-# validation dataset
-dataset.mode = 'val'
-val_dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_avilibale)
-data_loader_val = DataLoader(
-            val_dataset,
-            batch_size=batch_size,
-            shuffle=True,
-            num_workers=int(val_dataset.nThreads))
-dataset.mode = 'train'
-
-from tensorboardX import SummaryWriter
-writer = SummaryWriter()
-
-## build nets
-# resnet18 main net in our code
-resnet18 = models.resnet18(pretrained=True)
-visual_net = VisualNet(resnet18)
-
-# spatial coherence net
-spatial_net = AudioNet(input_nc=4)
-spatial_net.apply(weights_init)
-
-# audio network for backbone
-audio_net = AudioNet()
-audio_net.apply(weights_init)
-
-# fusion network for backbone
-fusion_net = APNet()
-fusion_net.apply(weights_init)
-
-# generator net for rir (Not used for FairPlay dataset)
-generator = Generator()
-generator.apply(weights_init)
-
-nets = (visual_net, spatial_net, audio_net, fusion_net, generator)
-
-# construct our models
-model = model(nets)
-
-# use models with gpu
-if gpu_avilibale:
-    model = torch.nn.DataParallel(model, device_ids=gpu_ids)
-    model.to(dataset.device)
+    # test dataset
+    test_dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_avilibale, 'test')
+    data_loader_test = DataLoader(
+                test_dataset,
+                batch_size=batch_size,
+                shuffle=True,
+                num_workers=int(test_dataset.nThreads))
     
-else:
-    model.to('cpu')
-    
-sum = sum([p.numel() for p in model.parameters() if p.requires_grad])
 
-print("the number of parametrs is:",sum)
-    
-     
-#define Adam optimzer
-param_backbone = [{'params': visual_net.parameters(), 'lr': lr},
-                {'params': audio_net.parameters(), 'lr': lr_big},
-                {'params': fusion_net.parameters(), 'lr': lr_big},
-                {'params': spatial_net.parameters(), 'lr': lr}]
-#optimizer_resnet = torch.optim.Adam(visual_net.parameters(), lr, param_backbone, betas=(beta1,0.999), weight_decay=weight_decay)
-optimizer = torch.optim.Adam(param_backbone, betas=(beta1,0.999), weight_decay=weight_decay)
+    from tensorboardX import SummaryWriter
+    writer = SummaryWriter()
 
-# set up loss function
-loss_criterion = torch.nn.MSELoss()
-spatial_loss_criterion = torch.nn.BCELoss()
-if(len(gpu_ids) > 0 and gpu_avilibale):
-    loss_criterion.cuda(gpu_ids[0])
+    ## build nets
+    # resnet18 main net in our code
+    resnet18 = models.resnet18(pretrained=True)
+    visual_net = VisualNet(resnet18)
 
-batch_loss = []
-total_steps = 0
+    # spatial coherence net
+    spatial_net = AudioNet(input_nc=4)
+    spatial_net.apply(weights_init)
 
-for epoch in range(epochs):
+    # audio network for backbone
+    audio_net = AudioNet()
+    audio_net.apply(weights_init)
+
+    # fusion network for backbone
+    fusion_net = APNet()
+    fusion_net.apply(weights_init)
+
+    # generator net for rir (Not used for FairPlay dataset)
+    generator = Generator()
+    generator.apply(weights_init)
+
+    nets = (visual_net, spatial_net, audio_net, fusion_net, generator)
+
+    # construct our models
+    model = model(nets)
+
+    # use models with gpu
     if gpu_avilibale:
-        torch.cuda.synchronize()
-    for i, data in enumerate(data_loader):
+        model = torch.nn.DataParallel(model, device_ids=gpu_ids)
+        model.to(dataset.device)
+    else:
+        model.to('cpu')
         
+    sum = sum([p.numel() for p in model.parameters() if p.requires_grad])
+    print("the number of parametrs is:",sum)
+        
+        
+    #define Adam optimzer
+    param_backbone = [{'params': visual_net.parameters(), 'lr': lr},
+                    {'params': audio_net.parameters(), 'lr': lr_big},
+                    {'params': fusion_net.parameters(), 'lr': lr_big},
+                    {'params': spatial_net.parameters(), 'lr': lr}]
+    #optimizer_resnet = torch.optim.Adam(visual_net.parameters(), lr, param_backbone, betas=(beta1,0.999), weight_decay=weight_decay)
+    optimizer = torch.optim.Adam(param_backbone, betas=(beta1,0.999), weight_decay=weight_decay)
+
+    # set up loss function
+    loss_criterion = torch.nn.MSELoss()
+    spatial_loss_criterion = torch.nn.BCELoss()
+    if(len(gpu_ids) > 0 and gpu_avilibale):
+        loss_criterion.cuda(gpu_ids[0])
+
+    batch_loss = []
+    total_steps = 0
+
+    for epoch in range(epochs):
+        if gpu_avilibale:
+            torch.cuda.synchronize()
+        for i, data in enumerate(data_loader):
+            
                 total_steps += batch_size
 
                 ## forward pass
                 # zero grad
                 optimizer.zero_grad()
+
+                # visual forward
+                visual_input = data['frame'].to(dataset.device)
+                visual_feature = visual_net.forward(visual_input)
                 
                 output = model(data)
-               
+                
 
                 ## compute loss for each model
                 # backbone loss
-                
                 difference_loss = loss_criterion(output['binaural_spectrogram'], Variable(output['audio_gt'], requires_grad=False))
                 channel1_loss = loss_criterion(output['left_spectrogram'], data['channel1_spec'][:,:,:-1,:])
                 channel2_loss = loss_criterion(output['right_spectrogram'], data['channel2_spec'][:,:,:-1,:])
