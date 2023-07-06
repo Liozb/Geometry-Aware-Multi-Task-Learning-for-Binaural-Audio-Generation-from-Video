@@ -32,24 +32,22 @@ def debug_dataset(dataset, idx=15):
     plt.imshow(frame_idx.permute(1,2,0).numpy())
     plt.savefig('pic_for_debug/frame.jpg', format='jpg')
     
-def display_val(model, loss_criterion, writer, index, dataset_val):
-    # number of batches to test for validation
-    val_batch = 10 
-    
+def display_val(model, loss_criterion, writer, index, dataset_val, opt):
     losses = []
     with torch.no_grad():
         for i, val_data in enumerate(dataset_val):
-            if i < val_batch:
-                output = model.forward(val_data)
-                loss = loss_criterion(output['binaural_spectrogram'], output['audio_gt'])
-                losses.append(loss.item()) 
-            else:
-                break
+            output = model(val_data)
+            fusion_loss1 = loss_criterion(output['left_spectrogram'], data['channel1_spec'][:,:,:-1,:])
+            fusion_loss2 = loss_criterion(output['right_spectrogram'], data['channel2_spec'][:,:,:-1,:])
+            fus_loss = (fusion_loss1 / 2 + fusion_loss2 / 2)
+            loss = loss_criterion(output['binaural_spectrogram'], Variable(output['audio_gt'])) + fus_loss
+
+            losses.append(loss.item()) 
     avg_loss = sum(losses)/len(losses)
-    writer.add_scalar('data/val_loss', avg_loss, index)
+    if opt.tensorboard:
+        writer.add_scalar('data/val_loss', avg_loss, index)
     print('val loss: %.3f' % avg_loss)
-    
-    return avg_loss 
+    return avg_loss
     
 
 if __name__ == '__main__':
@@ -134,7 +132,7 @@ if __name__ == '__main__':
     if(len(gpu_ids) > 0 and gpu_avilibale):
         loss_criterion.cuda(gpu_ids[0])
 
-    batch_loss = []
+    batch_loss, batch_loss1, batch_fusion_loss, batch_rir_loss, batch_spat_const_loss, batch_geom_const_loss = [], [], [], [], [], []
     total_steps = 0
 
     for epoch in range(epochs):
@@ -157,10 +155,11 @@ if __name__ == '__main__':
 
                 ## compute loss for each model
                 # backbone loss
-                difference_loss = loss_criterion(output['binaural_spectrogram'], Variable(output['audio_gt'], requires_grad=False))
+                difference_loss = loss_criterion(output['binaural_spectrogram'], Variable(output['audio_gt']))
                 channel1_loss = loss_criterion(output['left_spectrogram'], data['channel1_spec'][:,:,:-1,:])
                 channel2_loss = loss_criterion(output['right_spectrogram'], data['channel2_spec'][:,:,:-1,:])
-                loss_backbone = difference_loss + channel1_loss + channel2_loss
+                fusion_loss = (channel1_loss / 2 + channel2_loss / 2)
+                loss_backbone = lambda_binarual * difference_loss + lambda_f * fusion_loss
                 
                 # geometric consistency loss
                 mse_geometry = loss_criterion(output['visual_feature'], output['second_visual_feature']) 
@@ -174,7 +173,11 @@ if __name__ == '__main__':
                 # combine loss
                 loss = lambda_b * loss_backbone + lambda_g * loss_geometry + lambda_s * loss_spatial
                 batch_loss.append(loss.item())
-
+                batch_loss1.append(difference_loss.item())
+                batch_fusion_loss.append(fusion_loss.item())
+                batch_spat_const_loss.append(loss_spatial.item())
+                batch_geom_const_loss.append(loss_geometry.item())
+                
                 # update optimizer
                 #optimizer_resnet.zero_grad()
                 optimizer.zero_grad()
@@ -187,11 +190,19 @@ if __name__ == '__main__':
 
 
                 if(i % display_freq == 0):
-                        print('Display training progress at (epoch %d, total steps %d)' % (epoch, total_steps))
-                        avg_loss = sum(batch_loss) / len(batch_loss)
-                        print('Average loss: %.3f' % (avg_loss))
-                        batch_loss = []
-                        writer.add_scalar('data/loss', avg_loss, total_steps)
+                    print('Display training progress at (epoch %d, total_steps %d)' % (epoch, total_steps))
+                    avg_loss = sum(batch_loss) / len(batch_loss)
+                    avg_loss1 = sum(batch_loss1) / len(batch_loss1)
+                    avg_fusion_loss = sum(batch_fusion_loss) / len(batch_fusion_loss)
+                    avg_spat_const_loss = sum(batch_spat_const_loss) / len(batch_spat_const_loss)
+                    avg_geom_const_loss = sum(batch_geom_const_loss) / len(batch_geom_const_loss)
+                    print('Average loss: %.3f' % (avg_loss))
+                    batch_loss, batch_loss1, batch_fusion_loss, batch_rir_loss, batch_spat_const_loss, batch_geom_const_loss = [], [], [], [], [], []
+                    writer.add_scalar('data/loss', avg_loss, total_steps)
+                    writer.add_scalar('data/loss1', avg_loss1, total_steps)
+                    writer.add_scalar('data/fusion_loss', avg_fusion_loss, total_steps)
+                    writer.add_scalar('data/spat_const_loss', avg_spat_const_loss, total_steps)
+                    writer.add_scalar('data/geom_const_loss', avg_geom_const_loss, total_steps)
                         
 
                 if(i % save_latest_freq == 0):
