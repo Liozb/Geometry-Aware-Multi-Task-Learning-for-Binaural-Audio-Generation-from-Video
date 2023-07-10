@@ -4,6 +4,12 @@ from Models.backbone_model import *
 from Models.geometry_model import *
 from Models.spatial_model import *
 from Models.rir_model import *
+import sys
+import os
+
+DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(DIR))
+from params import *
 
 
 class model(torch.nn.Module):
@@ -20,14 +26,14 @@ class model(torch.nn.Module):
         model_spatial = modelSpatial(self.spatial_net)
 
          # visual forward
-        visual_input = data['frame'].to(self.device)
+        visual_input = data['frame'].to(device)
         visual_feature = self.visual_net.forward(visual_input)
                 
         # backbone forward
         output_backbone = model_backbone.forward(data, visual_feature)
         
         # geometric consistency forward 
-        second_visual_input = data['second_frame']
+        second_visual_input = data['second_frame'].to(device)
         second_visual_feature = self.visual_net.forward(second_visual_input)
         
         # spatial coherence forward

@@ -4,6 +4,12 @@ import torch
 from torch import optim
 import torch.nn.functional as F
 from torch.autograd import Variable
+import sys
+import os
+
+DIR = os.path.dirname(os.path.abspath(__file__))
+sys.path.append(os.path.dirname(DIR))
+from params import *
 
 def get_spectrogram(input_spectrogram, mask_prediction):
     spectrogram_diff_real = input_spectrogram[:,0,:-1,:] * mask_prediction[:,0,:,:] - input_spectrogram[:,1,:-1,:] * mask_prediction[:,1,:,:]
@@ -21,8 +27,8 @@ class modelBackbone(torch.nn.Module):
         self.name = "backbone"
 
     def forward(self, input, visual_feature, volatile=False):
-        audio_diff = input['audio_diff_spec']
-        audio_mix = input['audio_mix_spec']
+        audio_diff = input['audio_diff_spec'].to(device)
+        audio_mix = input['audio_mix_spec'].to(device)
         audio_gt = Variable(audio_diff[:,:,:-1,:], requires_grad=False)  # discarding the last time frame of the spectrogram(why?)
 
         input_spectrogram = Variable(audio_mix, requires_grad=False, volatile=volatile)

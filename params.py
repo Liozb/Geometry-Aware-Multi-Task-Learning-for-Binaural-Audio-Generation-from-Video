@@ -1,14 +1,19 @@
 import os
+import torch
 
 gpu_avilibale = True
 if not gpu_avilibale:
     os.environ["CUDA_VISIBLE_DEVICES"] = ""
+if gpu_avilibale:
+    device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+else:
+    device = torch.device('cpu')
     
 frames_dir = "/dsi/gannot-lab2/datasets2/FAIR-Play/frames_30fps/"
 audios_dir = "/dsi/gannot-lab2/datasets2/FAIR-Play/binaural_audios/"
 batch_size = 64
 epochs = 1000
-gpu_ids = [0,1,2,3]
+gpu_ids = [0, 1]
 lr = 1e-4
 lr_big = 1e-3 
 beta1 = 0.9

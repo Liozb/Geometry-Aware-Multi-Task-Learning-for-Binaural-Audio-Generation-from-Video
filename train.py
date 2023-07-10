@@ -37,8 +37,10 @@ def display_val(model, loss_criterion, writer, index, dataset_val, opt):
     with torch.no_grad():
         for i, val_data in enumerate(dataset_val):
             output = model(val_data)
-            fusion_loss1 = loss_criterion(output['left_spectrogram'], data['channel1_spec'][:,:,:-1,:])
-            fusion_loss2 = loss_criterion(output['right_spectrogram'], data['channel2_spec'][:,:,:-1,:])
+            channel1_spec = data['channel1_spec'].to(device)
+            channel2_spec = data['channel2_spec'].to(device)
+            fusion_loss1 = loss_criterion(output['left_spectrogram'], channel1_spec[:,:,:-1,:])
+            fusion_loss2 = loss_criterion(output['right_spectrogram'], channel2_spec[:,:,:-1,:])
             fus_loss = (fusion_loss1 / 2 + fusion_loss2 / 2)
             loss = loss_criterion(output['binaural_spectrogram'], Variable(output['audio_gt'])) + fus_loss
 
@@ -52,8 +54,9 @@ def display_val(model, loss_criterion, writer, index, dataset_val, opt):
 
 if __name__ == '__main__':
     dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_avilibale)
+    subset_dataset = Subset(dataset, dataset.train_indices)
     data_loader = DataLoader(
-                dataset,
+                subset_dataset,
                 batch_size=batch_size,
                 shuffle=True,
                 num_workers=int(dataset.nThreads))
@@ -62,8 +65,9 @@ if __name__ == '__main__':
         # validation dataset
     dataset.mode = 'val'
     val_dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_avilibale,  'val')
+    subset_val_dataset = Subset(val_dataset, val_dataset.val_indices)
     data_loader_val = DataLoader(
-                val_dataset,
+                subset_val_dataset,
                 batch_size=batch_size,
                 shuffle=True,
                 num_workers=int(val_dataset.nThreads))
@@ -71,8 +75,9 @@ if __name__ == '__main__':
     
     # test dataset
     test_dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_avilibale, 'test')
+    subset_test_dataset = Subset(test_dataset, test_dataset.test_indices)
     data_loader_test = DataLoader(
-                test_dataset,
+                subset_test_dataset,
                 batch_size=batch_size,
                 shuffle=True,
                 num_workers=int(test_dataset.nThreads))
@@ -155,19 +160,23 @@ if __name__ == '__main__':
 
                 ## compute loss for each model
                 # backbone loss
-                difference_loss = loss_criterion(output['binaural_spectrogram'], Variable(output['audio_gt']))
-                channel1_loss = loss_criterion(output['left_spectrogram'], data['channel1_spec'][:,:,:-1,:])
-                channel2_loss = loss_criterion(output['right_spectrogram'], data['channel2_spec'][:,:,:-1,:])
+                channel1_spec = data['channel1_spec'].to(device)
+                channel2_spec = data['channel2_spec'].to(device)
+                difference_loss = loss_criterion(output['binaural_spectrogram'], output['audio_gt'])
+                channel1_loss = loss_criterion(output['left_spectrogram'], channel1_spec[:,:,:-1,:])
+                channel2_loss = loss_criterion(output['right_spectrogram'], channel2_spec[:,:,:-1,:])
                 fusion_loss = (channel1_loss / 2 + channel2_loss / 2)
                 loss_backbone = lambda_binarual * difference_loss + lambda_f * fusion_loss
                 
                 # geometric consistency loss
                 mse_geometry = loss_criterion(output['visual_feature'], output['second_visual_feature']) 
-                loss_geometry = np.max(mse_geometry - alpha, 0)
+                loss_geometry = torch.maximum(mse_geometry - alpha, torch.tensor(0))
                 
                 # spatial coherence loss
                 c = output['c']
                 c_pred = output['c_pred']
+                if c_pred.shape[1] == 1:
+                    c_pred = c_pred.squeeze(dim=1)
                 loss_spatial = spatial_loss_criterion(c, c_pred)
                 
                 # combine loss
@@ -236,9 +245,11 @@ if __name__ == '__main__':
     for idx, data in enumerate(data_loader_test):
             # Perform forward pass
             output = model(data)
-            difference_loss = loss_criterion(output['binaural_spectrogram'], Variable(output['audio_gt']))
-            channel1_loss = loss_criterion(output['left_spectrogram'], data['channel1_spec'][:,:,:-1,:])
-            channel2_loss = loss_criterion(output['right_spectrogram'], data['channel2_spec'][:,:,:-1,:])
+            channel1_spec = data['channel1_spec'].to(device)
+            channel2_spec = data['channel2_spec'].to(device)
+            difference_loss = loss_criterion(output['binaural_spectrogram'], output['audio_gt'])
+            channel1_loss = loss_criterion(output['left_spectrogram'], channel1_spec[:,:,:-1,:])
+            channel2_loss = loss_criterion(output['right_spectrogram'], channel2_spec[:,:,:-1,:])
             fusion_loss = (channel1_loss / 2 + channel2_loss / 2)
             loss_backbone = lambda_binarual * difference_loss + lambda_f * fusion_loss
             

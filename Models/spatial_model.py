@@ -1,13 +1,15 @@
 # this file responsible for the spatial coherence train model
 
-import sys
 import random
+import sys
 import os
 
 DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(DIR))
+from params import *
 from imports import *
 from networks.Networks import *
+
 
 
 class modelSpatial(torch.nn.Module):
@@ -17,8 +19,8 @@ class modelSpatial(torch.nn.Module):
         self.name = "spatial"
 
     def forward(self, input, visual_feature):
-        channel1_spec = input['channel1_spec']
-        channel2_spec = input['channel2_spec']
+        channel1_spec = input['channel1_spec'].to(device)
+        channel2_spec = input['channel2_spec'].to(device)
         l = channel2_spec.shape[0]
         shape = (channel2_spec.shape[0],channel2_spec.shape[1]*2,channel2_spec.shape[2],channel2_spec.shape[3])
         audio = torch.zeros(shape).cuda()

@@ -48,7 +48,8 @@ class AudioVisualDataset(Dataset):
         self.enable_data_augmentation = True
         self.nThreads = 16
         self.audios = []
-        if gpu_avilibale:
+        self.gpu_avilibale = gpu_avilibale
+        if self.gpu_avilibale:
             self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
         else:
             self.device = torch.device('cpu')
@@ -82,10 +83,9 @@ class AudioVisualDataset(Dataset):
         return len(self.audios)
 
     def __getitem__(self, index):
-        # load audio
-        audio, audio_rate = librosa.load(self.audios[index], sr=self.audio_sampling_rate, mono=False)
-        
-        if index in self.train_indices:
+        if self.mode =='train':
+            # load audio   
+            audio, audio_rate = librosa.load(self.audios[index], sr=self.audio_sampling_rate, mono=False)
             # randomly get a start time for the audio segment from the 10s clip
             audio_start_time = random.uniform(0, 9.9 - self.audio_length)
             audio_end_time = audio_start_time + self.audio_length
@@ -123,8 +123,10 @@ class AudioVisualDataset(Dataset):
             channel2_spec = torch.FloatTensor(generate_spectrogram(audio_channel2))
 
             return {'frame': frame, 'second_frame': second_frame, 'audio_diff_spec': audio_diff_spec, 'audio_mix_spec': audio_mix_spec, 'channel1_spec': channel1_spec , 'channel2_spec': channel2_spec}
-        elif index in self.val_indices:
-            # randomly get a start time for the audio segment from the 10s clip
+        elif self.mode =='val':
+            # load audio   
+            audio, audio_rate = librosa.load(self.audios[index], sr=self.audio_sampling_rate, mono=False)
+            # randomly get a start time for the audio segment from the 10s clip]
             audio_start_time = random.uniform(0, 9.9 - self.audio_length)
             audio_end_time = audio_start_time + self.audio_length
             audio_start = int(audio_start_time * self.audio_sampling_rate)
@@ -162,6 +164,8 @@ class AudioVisualDataset(Dataset):
 
             return {'frame': frame, 'second_frame': second_frame, 'audio_diff_spec': audio_diff_spec, 'audio_mix_spec': audio_mix_spec, 'channel1_spec': channel1_spec , 'channel2_spec': channel2_spec}
         else:
+            # load audio   
+            audio, audio_rate = librosa.load(self.audios[index], sr=self.audio_sampling_rate, mono=False)
             # make a mono audio file for the test
             audio = normalize(audio)
             audio_channel1 = audio[0, :]
