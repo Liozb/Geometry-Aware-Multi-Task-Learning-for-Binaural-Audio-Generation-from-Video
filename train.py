@@ -209,6 +209,9 @@ if __name__ == '__main__':
                         print('saving the latest model (epoch %d, total_steps %d)' % (epoch, total_steps))
                         torch.save(visual_net.state_dict(), os.path.join('.', checkpoints_dir, 'visual_latest.pth'))
                         torch.save(audio_net.state_dict(), os.path.join('.', checkpoints_dir, 'audio_latest.pth'))
+                        torch.save(fusion_net.state_dict(), os.path.join('.', checkpoints_dir, 'fusion_latest.pth'))
+                        torch.save(spatial_net.state_dict(), os.path.join('.', checkpoints_dir, 'classifier_latest.pth'))
+                        torch.save(generator.state_dict(), os.path.join('.', checkpoints_dir, 'generator_latest.pth'))
 
                 if(i % validation_freq == 0):
                         model.eval()
@@ -224,4 +227,37 @@ if __name__ == '__main__':
                             print('saving the best model (epoch %d, total_steps %d) with validation error %.3f\n' % (epoch, total_steps, val_err))
                             torch.save(visual_net.state_dict(), os.path.join('.', checkpoints_dir, 'visual_best.pth'))
                             torch.save(audio_net.state_dict(), os.path.join('.', checkpoints_dir, 'audio_best.pth'))
+                            torch.save(fusion_net.state_dict(), os.path.join('.', checkpoints_dir, 'fusion_best.pth'))
+                            torch.save(spatial_net.state_dict(), os.path.join('.', checkpoints_dir, 'classifier_best.pth'))
+                            torch.save(generator.state_dict(), os.path.join('.', checkpoints_dir, 'generator_best.pth'))
+    # run the test
+    model.eval()
+    losses = []
+    for idx, data in enumerate(data_loader_test):
+            # Perform forward pass
+            output = model(data)
+            difference_loss = loss_criterion(output['binaural_spectrogram'], Variable(output['audio_gt']))
+            channel1_loss = loss_criterion(output['left_spectrogram'], data['channel1_spec'][:,:,:-1,:])
+            channel2_loss = loss_criterion(output['right_spectrogram'], data['channel2_spec'][:,:,:-1,:])
+            fusion_loss = (channel1_loss / 2 + channel2_loss / 2)
+            loss_backbone = lambda_binarual * difference_loss + lambda_f * fusion_loss
+            
+            # geometric consistency loss
+            mse_geometry = loss_criterion(output['visual_feature'], output['second_visual_feature']) 
+            loss_geometry = np.max(mse_geometry - alpha, 0)
+            
+            # spatial coherence loss
+            c = output['c']
+            c_pred = output['c_pred']
+            loss_spatial = spatial_loss_criterion(c, c_pred)
+            
+            # combine loss
+            loss = lambda_b * loss_backbone + lambda_g * loss_geometry + lambda_s * loss_spatial
+            losses.append(loss.item())
+    loss_avg = (sum(losses)/len(losses)) 
+    print("test average loss is:", loss_avg)       
+    
+            
 
+
+    
