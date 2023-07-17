@@ -13,13 +13,15 @@ frames_dir = "/dsi/gannot-lab2/datasets2/FAIR-Play/frames_30fps/"
 audios_dir = "/dsi/gannot-lab2/datasets2/FAIR-Play/binaural_audios/"
 batch_size = 64
 epochs = 1000
-gpu_ids = [0, 1]
+gpu_ids = [0]
+
 lr = 1e-4
 lr_big = 1e-3 
+
 beta1 = 0.9
 weight_decay = 0.0005 # use for regolization
 train_epochs = 1000
-checkpoints_dir = "/dsi/bermanl1/CODE/checkpoints"
+checkpoints_dir = "/home/dsi/bermanl1/CODE/checkpoints/"
 learning_rate_decrease_itr = 10
 decay_factor = 0.94
 alpha = 0

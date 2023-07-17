@@ -19,28 +19,11 @@ class modelSpatial(torch.nn.Module):
         self.name = "spatial"
 
     def forward(self, input, visual_feature):
-        channel1_spec = input['channel1_spec'].to(device)
-        channel2_spec = input['channel2_spec'].to(device)
-        l = channel2_spec.shape[0]
-        shape = (channel2_spec.shape[0],channel2_spec.shape[1]*2,channel2_spec.shape[2],channel2_spec.shape[3])
-        audio = torch.zeros(shape).cuda()
-        c = torch.zeros(l).cuda()
-        for i in range(l):
-            chanel1 = channel1_spec[i,:,:,:]
-            chanel2 = channel2_spec[i,:,:,:]
-
-            if np.random.random() < 0.5:
-                cl_spec = torch.cat((chanel1, chanel2), dim=0)
-                label = torch.FloatTensor([0])
-            else:
-                cl_spec = torch.cat((chanel2, chanel1), dim=0)
-                label = torch.FloatTensor([1])
-            audio[i,:,:,:] = cl_spec
-            c[i] = label
-            
-        c_pred = self.net_audio(audio, visual_feature, self.name)
-        # need a fix with passing through a classifier
-        output = {'c_pred': c_pred, 'c': c}                     
+        cl_spec = input['cl_spec'].to(device) 
+        label = input['label'].to(device) 
+        
+        pred = self.net_audio(cl_spec, visual_feature, self.name)
+        output = {'cl_pred': pred, 'label': label}                     
         return output
     
 if __name__ == "__main__":

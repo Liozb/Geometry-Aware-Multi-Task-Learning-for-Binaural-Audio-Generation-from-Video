@@ -7,6 +7,7 @@ random.seed(42)
 DIR = os.path.dirname(os.path.abspath(__file__))
 sys.path.append(os.path.dirname(DIR))
 from imports import *
+from params import *
 
 def generate_spectrogram(audio):
     spectro = librosa.core.stft(audio, n_fft=512, hop_length=160, win_length=400, center=True)
@@ -48,11 +49,7 @@ class AudioVisualDataset(Dataset):
         self.enable_data_augmentation = True
         self.nThreads = 16
         self.audios = []
-        self.gpu_avilibale = gpu_avilibale
-        if self.gpu_avilibale:
-            self.device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-        else:
-            self.device = torch.device('cpu')
+        self.device = device
         self.mode = mode
 
         for file_name in os.listdir(audio_dir):
@@ -121,8 +118,17 @@ class AudioVisualDataset(Dataset):
             audio_mix_spec = torch.FloatTensor(generate_spectrogram(audio_channel1 + audio_channel2))
             channel1_spec = torch.FloatTensor(generate_spectrogram(audio_channel1))
             channel2_spec = torch.FloatTensor(generate_spectrogram(audio_channel2))
+            
+            left_spec = torch.FloatTensor(generate_spectrogram(audio_channel1)[:, :256, :])
+            right_spec = torch.FloatTensor(generate_spectrogram(audio_channel2)[:, :256, :])
+            if np.random.random() < 0.5:
+                coherence_spec = torch.cat((left_spec, right_spec), dim=0)
+                label = torch.FloatTensor([0])
+            else:
+                coherence_spec = torch.cat((right_spec, left_spec), dim=0)
+                label = torch.FloatTensor([1])
 
-            return {'frame': frame, 'second_frame': second_frame, 'audio_diff_spec': audio_diff_spec, 'audio_mix_spec': audio_mix_spec, 'channel1_spec': channel1_spec , 'channel2_spec': channel2_spec}
+            return {'frame': frame, 'second_frame': second_frame, 'audio_diff_spec': audio_diff_spec, 'audio_mix_spec': audio_mix_spec, 'channel1_spec': channel1_spec , 'channel2_spec': channel2_spec, 'cl_spec': coherence_spec, 'label': label}
         elif self.mode =='val':
             # load audio   
             audio, audio_rate = librosa.load(self.audios[index], sr=self.audio_sampling_rate, mono=False)
@@ -161,8 +167,17 @@ class AudioVisualDataset(Dataset):
             audio_mix_spec = torch.FloatTensor(generate_spectrogram(audio_channel1 + audio_channel2))
             channel1_spec = torch.FloatTensor(generate_spectrogram(audio_channel1))
             channel2_spec = torch.FloatTensor(generate_spectrogram(audio_channel2))
+            
+            left_spec = torch.FloatTensor(generate_spectrogram(audio_channel1)[:, :256, :])
+            right_spec = torch.FloatTensor(generate_spectrogram(audio_channel2)[:, :256, :])
+            if np.random.random() < 0.5:
+                coherence_spec = torch.cat((left_spec, right_spec), dim=0)
+                label = torch.FloatTensor([0])
+            else:
+                coherence_spec = torch.cat((right_spec, left_spec), dim=0)
+                label = torch.FloatTensor([1])
 
-            return {'frame': frame, 'second_frame': second_frame, 'audio_diff_spec': audio_diff_spec, 'audio_mix_spec': audio_mix_spec, 'channel1_spec': channel1_spec , 'channel2_spec': channel2_spec}
+            return {'frame': frame, 'second_frame': second_frame, 'audio_diff_spec': audio_diff_spec, 'audio_mix_spec': audio_mix_spec, 'channel1_spec': channel1_spec , 'channel2_spec': channel2_spec, 'cl_spec': coherence_spec, 'label': label}
         else:
             # load audio   
             audio, audio_rate = librosa.load(self.audios[index], sr=self.audio_sampling_rate, mono=False)

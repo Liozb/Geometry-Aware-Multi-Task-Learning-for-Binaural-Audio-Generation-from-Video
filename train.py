@@ -32,13 +32,13 @@ def debug_dataset(dataset, idx=15):
     plt.imshow(frame_idx.permute(1,2,0).numpy())
     plt.savefig('pic_for_debug/frame.jpg', format='jpg')
     
-def display_val(model, loss_criterion, writer, index, dataset_val, opt):
+def display_val(model, loss_criterion, writer, index, dataset_val):
     losses = []
     with torch.no_grad():
         for i, val_data in enumerate(dataset_val):
             output = model(val_data)
-            channel1_spec = data['channel1_spec'].to(device)
-            channel2_spec = data['channel2_spec'].to(device)
+            channel1_spec = val_data['channel1_spec'].to(device)
+            channel2_spec = val_data['channel2_spec'].to(device)
             fusion_loss1 = loss_criterion(output['left_spectrogram'], channel1_spec[:,:,:-1,:])
             fusion_loss2 = loss_criterion(output['right_spectrogram'], channel2_spec[:,:,:-1,:])
             fus_loss = (fusion_loss1 / 2 + fusion_loss2 / 2)
@@ -46,8 +46,7 @@ def display_val(model, loss_criterion, writer, index, dataset_val, opt):
 
             losses.append(loss.item()) 
     avg_loss = sum(losses)/len(losses)
-    if opt.tensorboard:
-        writer.add_scalar('data/val_loss', avg_loss, index)
+    writer.add_scalar('data/val_loss', avg_loss, index)
     print('val loss: %.3f' % avg_loss)
     return avg_loss
     
@@ -119,8 +118,8 @@ if __name__ == '__main__':
     else:
         model.to('cpu')
         
-    sum = sum([p.numel() for p in model.parameters() if p.requires_grad])
-    print("the number of parametrs is:",sum)
+    param_sum = sum([p.numel() for p in model.parameters() if p.requires_grad])
+    print("the number of parametrs is:",param_sum)
         
         
     #define Adam optimzer
@@ -128,17 +127,18 @@ if __name__ == '__main__':
                     {'params': audio_net.parameters(), 'lr': lr_big},
                     {'params': fusion_net.parameters(), 'lr': lr_big},
                     {'params': spatial_net.parameters(), 'lr': lr}]
-    #optimizer_resnet = torch.optim.Adam(visual_net.parameters(), lr, param_backbone, betas=(beta1,0.999), weight_decay=weight_decay)
+    
     optimizer = torch.optim.Adam(param_backbone, betas=(beta1,0.999), weight_decay=weight_decay)
 
     # set up loss function
     loss_criterion = torch.nn.MSELoss()
-    spatial_loss_criterion = torch.nn.BCELoss()
+    spatial_loss_criterion = torch.nn.BCEWithLogitsLoss()
     if(len(gpu_ids) > 0 and gpu_avilibale):
         loss_criterion.cuda(gpu_ids[0])
 
     batch_loss, batch_loss1, batch_fusion_loss, batch_rir_loss, batch_spat_const_loss, batch_geom_const_loss = [], [], [], [], [], []
     total_steps = 0
+    best_err = float("inf")
 
     for epoch in range(epochs):
         if gpu_avilibale:
@@ -151,10 +151,6 @@ if __name__ == '__main__':
                 # zero grad
                 optimizer.zero_grad()
 
-                # visual forward
-                visual_input = data['frame'].to(dataset.device)
-                visual_feature = visual_net.forward(visual_input)
-                
                 output = model(data)
                 
 
@@ -173,10 +169,8 @@ if __name__ == '__main__':
                 loss_geometry = torch.maximum(mse_geometry - alpha, torch.tensor(0))
                 
                 # spatial coherence loss
-                c = output['c']
-                c_pred = output['c_pred']
-                if c_pred.shape[1] == 1:
-                    c_pred = c_pred.squeeze(dim=1)
+                c = output['cl_pred']
+                c_pred = output['label']
                 loss_spatial = spatial_loss_criterion(c, c_pred)
                 
                 # combine loss

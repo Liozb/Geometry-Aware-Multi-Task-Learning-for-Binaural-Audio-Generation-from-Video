@@ -27,14 +27,14 @@ class model(torch.nn.Module):
 
          # visual forward
         visual_input = data['frame'].to(device)
-        visual_feature = self.visual_net.forward(visual_input)
+        visual_feature, visual_feature_flat = self.visual_net.forward(visual_input)
                 
         # backbone forward
-        output_backbone = model_backbone.forward(data, visual_feature)
+        output_backbone = model_backbone.forward(data, visual_feature, visual_feature_flat)
         
         # geometric consistency forward 
         second_visual_input = data['second_frame'].to(device)
-        second_visual_feature = self.visual_net.forward(second_visual_input)
+        second_visual_feature, second_visual_feature_flat = self.visual_net.forward(second_visual_input)
         
         # spatial coherence forward
         output_spatial = model_spatial(data, visual_feature)

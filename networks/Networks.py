@@ -65,10 +65,14 @@ class VisualNet(nn.Module):
         # without the 2 last layers
         layers = list(original_resnet.children())[0:-2]
         self.feature_extraction = nn.Sequential(*layers) #features before conv1x1
+        self.conv1x1 = create_conv(512, 8, 1, 0) #reduce dimension of extracted visual features
+        self.fc = nn.Linear(784, 512)
 
     def forward(self, x):
         x = self.feature_extraction(x)
-        return x
+        vis_feat = self.conv1x1(x)
+        vis_feat = vis_feat.view(vis_feat.shape[0], -1, 1, 1) #flatten visual feature
+        return x, vis_feat
 
 
 class AVFusionBlock(nn.Module):
@@ -129,8 +133,7 @@ class AudioNet(nn.Module):
         
         elif model_name == 'backbone': 
             
-            visual_feat = self.conv1x1(visual_feat)
-            visual_feat = visual_feat.view(visual_feat.shape[0], -1, 1, 1) #flatten visual feature
+
             visual_feat = visual_feat.repeat(1, 1, audio_conv5feature.shape[-2], audio_conv5feature.shape[-1]) #tile visual feature
             
             audioVisual_feature = torch.cat((visual_feat, audio_conv5feature), dim=1)   

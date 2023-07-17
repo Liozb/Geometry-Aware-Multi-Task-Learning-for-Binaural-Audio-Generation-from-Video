@@ -26,13 +26,13 @@ class modelBackbone(torch.nn.Module):
         self.net_audio, self.net_fusion = backbone_nets
         self.name = "backbone"
 
-    def forward(self, input, visual_feature, volatile=False):
+    def forward(self, input, visual_feature, visual_feature_flat, volatile=False):
         audio_diff = input['audio_diff_spec'].to(device)
         audio_mix = input['audio_mix_spec'].to(device)
-        audio_gt = Variable(audio_diff[:,:,:-1,:], requires_grad=False)  # discarding the last time frame of the spectrogram(why?)
+        audio_gt = Variable(audio_diff[:,:,:-1,:], requires_grad=False)  # discarding the last time frame of the spectrogram
 
         input_spectrogram = Variable(audio_mix, requires_grad=False, volatile=volatile)
-        mask_prediction, upfeatures = self.net_audio(input_spectrogram, visual_feature, self.name)
+        mask_prediction, upfeatures = self.net_audio(input_spectrogram, visual_feature_flat, self.name)
 
         #complex masking to obtain the predicted spectrogram
         binaural_spectrogram = get_spectrogram(input_spectrogram, mask_prediction)
