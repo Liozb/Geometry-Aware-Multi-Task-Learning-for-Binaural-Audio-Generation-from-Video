@@ -40,12 +40,12 @@ def normalize(samples, desired_rms = 0.1, eps = 1e-4):
 
 
 class AudioVisualDataset(Dataset):
-    def __init__(self, audio_dir, frame_dir,gpu_avilibale, mode = 'train'):
+    def __init__(self, audio_dir, frame_dir, gpu_available, mode = 'train'):
         super(AudioVisualDataset, self).__init__()
         self.audio_dir = audio_dir
         self.frame_dir = frame_dir
-        self.audio_length = 0.63            # the audio for each length is 0.63 sec
-        self.audio_sampling_rate = 16000    # sampling rate for each audio
+        self.audio_length = audio_length           # the audio for each length is 0.63 sec
+        self.audio_sampling_rate = audio_sampling_rate    # sampling rate for each audio
         self.enable_data_augmentation = True
         self.nThreads = 16
         self.audios = []
@@ -185,7 +185,7 @@ class AudioVisualDataset(Dataset):
             audio = normalize(audio)
             audio_channel1 = audio[0, :]
             audio_channel2 = audio[1, :]
-            audio_mix_spec = torch.FloatTensor(generate_spectrogram(audio_channel1 + audio_channel2))
+            audio_mix = audio_channel1 + audio_channel2
             
             # get the frame dir path based on audio path
             path_parts = self.audios[index].strip().split('/')
@@ -199,8 +199,8 @@ class AudioVisualDataset(Dataset):
             for frame_file in frame_files:
                 frame_path = os.path.join(frames_dir, frame_file)
                 # Load frame
-                frame = process_image(Image.open(frame_path).convert('RGB'), self.enable_data_augmentation)
+                frame = process_image(Image.open(frame_path).convert('RGB'), augment=False)
                 frame = self.vision_transform(frame)  
                 frames.append(audio)
                 
-            return {'frames': frames, 'audio_mix_spec': audio_mix_spec}
+            return {'frames': frames, 'audio_mix': audio_mix, 'audio_channel1': audio_channel1 , 'audio_channel2': audio_channel2}

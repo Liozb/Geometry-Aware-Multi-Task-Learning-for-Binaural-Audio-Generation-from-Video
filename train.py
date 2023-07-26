@@ -5,9 +5,38 @@ from Models.spatial_model import *
 from Models.rir_model import *
 from Models.model import *
 from imports import * 
-from Datasets.AudioVisualDataset import AudioVisualDataset
+from Datasets.AudioVisualDataset import *
 from networks.Networks import *
 from params import *
+
+def data_test_handle(data, idx):
+        frames = data['frames']
+        audio_mix = data['audio_mix']
+        audio_channel1 = data['audio_channel1']
+        audio_channel2 = data['audio_channel2']
+        
+        audio_start_time = idx * test_overlap * audio_length
+        audio_end_time = idx * test_overlap * audio_length + audio_length
+        
+        # get the closest frame to the audio segment
+        frame_index = int(round(((audio_start_time + audio_end_time) / 2.0 + 0.05) * 10))  # 10 frames extracted per second
+        frame = frames[frame_index]
+  
+
+        # get a frame 1 secend befor/after the original frame
+        delta = random.uniform(-1, 1)
+        second_frame_index = int(np.round(frame_index + 10*delta)) 
+        if second_frame_index <= 0:
+            second_frame_index = int(np.round(frame_index + 10*abs(delta)))
+        second_frame = frames[second_frame_index]
+        
+        # passing the spectrogram of the difference
+        audio_diff_spec = torch.FloatTensor(generate_spectrogram(audio_channel1 - audio_channel2))
+        audio_mix_spec = torch.FloatTensor(generate_spectrogram(audio_mix))
+        channel1_spec = torch.FloatTensor(generate_spectrogram(audio_channel1))
+        channel2_spec = torch.FloatTensor(generate_spectrogram(audio_channel2))
+        
+        return {'frame': frame, 'second_frame': second_frame, 'audio_diff_spec': audio_diff_spec, 'audio_mix_spec': audio_mix_spec, 'channel1_spec': channel1_spec , 'channel2_spec': channel2_spec}
 
 
 def debug_dataset(dataset, idx=15):
@@ -36,7 +65,7 @@ def display_val(model, loss_criterion, writer, index, dataset_val):
     losses = []
     with torch.no_grad():
         for i, val_data in enumerate(dataset_val):
-            output = model(val_data)
+            output = model(val_data, mode='val')
             channel1_spec = val_data['channel1_spec'].to(device)
             channel2_spec = val_data['channel2_spec'].to(device)
             fusion_loss1 = loss_criterion(output['left_spectrogram'], channel1_spec[:,:,:-1,:])
@@ -52,7 +81,7 @@ def display_val(model, loss_criterion, writer, index, dataset_val):
     
 
 if __name__ == '__main__':
-    dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_avilibale)
+    dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_available)
     subset_dataset = Subset(dataset, dataset.train_indices)
     data_loader = DataLoader(
                 subset_dataset,
@@ -63,7 +92,7 @@ if __name__ == '__main__':
 
         # validation dataset
     dataset.mode = 'val'
-    val_dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_avilibale,  'val')
+    val_dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_available,  'val')
     subset_val_dataset = Subset(val_dataset, val_dataset.val_indices)
     data_loader_val = DataLoader(
                 subset_val_dataset,
@@ -73,11 +102,11 @@ if __name__ == '__main__':
     dataset.mode = 'train'
     
     # test dataset
-    test_dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_avilibale, 'test')
+    test_dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_available, 'test')
     subset_test_dataset = Subset(test_dataset, test_dataset.test_indices)
     data_loader_test = DataLoader(
                 subset_test_dataset,
-                batch_size=batch_size,
+                batch_size=batch_size_test,
                 shuffle=True,
                 num_workers=int(test_dataset.nThreads))
     
@@ -112,7 +141,7 @@ if __name__ == '__main__':
     model = model(nets)
 
     # use models with gpu
-    if gpu_avilibale:
+    if gpu_available:
         model = torch.nn.DataParallel(model, device_ids=gpu_ids)
         model.to(dataset.device)
     else:
@@ -133,7 +162,7 @@ if __name__ == '__main__':
     # set up loss function
     loss_criterion = torch.nn.MSELoss()
     spatial_loss_criterion = torch.nn.BCEWithLogitsLoss()
-    if(len(gpu_ids) > 0 and gpu_avilibale):
+    if(len(gpu_ids) > 0 and gpu_available):
         loss_criterion.cuda(gpu_ids[0])
 
     batch_loss, batch_loss1, batch_fusion_loss, batch_rir_loss, batch_spat_const_loss, batch_geom_const_loss = [], [], [], [], [], []
@@ -141,8 +170,8 @@ if __name__ == '__main__':
     best_err = float("inf")
 
     for epoch in range(epochs):
-        if gpu_avilibale:
-            torch.cuda.synchronize()
+        if gpu_available:
+            torch.cuda.synchronize(device=device)
         for i, data in enumerate(data_loader):
             
                 total_steps += batch_size
@@ -151,7 +180,7 @@ if __name__ == '__main__':
                 # zero grad
                 optimizer.zero_grad()
 
-                output = model(data)
+                output = model(data,mode='train')
                 
 
                 ## compute loss for each model
@@ -237,8 +266,19 @@ if __name__ == '__main__':
     model.eval()
     losses = []
     for idx, data in enumerate(data_loader_test):
+        sliding_window_size = audio_length  * audio_sampling_rate
+        audio_length_test = data['audio_mix'].shape[1]
+        
+        num_loops =  (np.floor(audio_length_test/sliding_window_size))/test_overlap - 1 + round(audio_length_test % sliding_window_size)
+        
+        for j in range(num_loops):
+            
+            test_data = data_test_handle(data, j)
+        
             # Perform forward pass
-            output = model(data)
+            output = model(data, mode='test')
+            
+            
             channel1_spec = data['channel1_spec'].to(device)
             channel2_spec = data['channel2_spec'].to(device)
             difference_loss = loss_criterion(output['binaural_spectrogram'], output['audio_gt'])
@@ -251,13 +291,8 @@ if __name__ == '__main__':
             mse_geometry = loss_criterion(output['visual_feature'], output['second_visual_feature']) 
             loss_geometry = np.max(mse_geometry - alpha, 0)
             
-            # spatial coherence loss
-            c = output['c']
-            c_pred = output['c_pred']
-            loss_spatial = spatial_loss_criterion(c, c_pred)
-            
             # combine loss
-            loss = lambda_b * loss_backbone + lambda_g * loss_geometry + lambda_s * loss_spatial
+            loss = lambda_b * loss_backbone + lambda_g * loss_geometry 
             losses.append(loss.item())
     loss_avg = (sum(losses)/len(losses)) 
     print("test average loss is:", loss_avg)       

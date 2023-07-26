@@ -28,9 +28,10 @@ class modelBackbone(torch.nn.Module):
 
     def forward(self, input, visual_feature, visual_feature_flat, volatile=False):
         audio_diff = input['audio_diff_spec'].to(device)
-        audio_mix = input['audio_mix_spec'].to(device)
-        audio_gt = Variable(audio_diff[:,:,:-1,:], requires_grad=False)  # discarding the last time frame of the spectrogram
+        audio_gt = audio_diff[:,:,:-1,:]  # discarding the last time frame of the spectrogram
 
+        audio_mix = input['audio_mix_spec'].to(device)
+        
         input_spectrogram = Variable(audio_mix, requires_grad=False, volatile=volatile)
         mask_prediction, upfeatures = self.net_audio(input_spectrogram, visual_feature_flat, self.name)
 
@@ -39,8 +40,8 @@ class modelBackbone(torch.nn.Module):
         
         # predicted channels
         pred_left_mask, pred_right_mask = self.net_fusion(visual_feature, upfeatures)
-        left_spectrogram = get_spectrogram(input_spectrogram, pred_left_mask).cuda()
-        right_spectrogram = get_spectrogram(input_spectrogram, pred_right_mask).cuda()
+        left_spectrogram = get_spectrogram(input_spectrogram, pred_left_mask).to(device)
+        right_spectrogram = get_spectrogram(input_spectrogram, pred_right_mask).to(device)
 
         output =  {'mask_prediction': mask_prediction, 'binaural_spectrogram': binaural_spectrogram, 'audio_gt': audio_gt, 'left_spectrogram': left_spectrogram, 'right_spectrogram': right_spectrogram}
         return output
