@@ -11,7 +11,7 @@ from params import *
 
 def data_test_handle(data, idx):
         frames = data['frames']
-        audio_mix = data['audio_mix']
+        audio_mix = data['channel1_spec']
         audio_channel1 = data['audio_channel1']
         audio_channel2 = data['audio_channel2']
         
@@ -39,27 +39,41 @@ def data_test_handle(data, idx):
         return {'frame': frame, 'second_frame': second_frame, 'audio_diff_spec': audio_diff_spec, 'audio_mix_spec': audio_mix_spec, 'channel1_spec': channel1_spec , 'channel2_spec': channel2_spec}
 
 
-def debug_dataset(dataset, idx=15):
+def debug_dataset(dataset, epoch, idx=15,flag='input'):
     """ debug function to whatch a specific index in the dataset.
         saves the output to the dubug folder. 
 
     Args:
         idx (int, optional): index for a place in the dataset. Defaults to 15.
     """
-    data_idx = dataset[idx]
-    frame_idx = data_idx['frame']
-    audio_spec_idx = data_idx['audio_diff_spec']
+    if flag == 'input':
+        frame = dataset['frame']
+        frame_idx = frame[idx]
+        
+        data_idx = dataset['audio_mix_spec']
+        audio_spec_idx = data_idx[idx]
+    elif flag == 'output':
+        data_idx = dataset['binaural_spectrogram']
+        audio_spec_idx = data_idx[idx]
+        
+        cpu_tensor = audio_spec_idx.clone().cpu()
+        audio_spec_idx = cpu_tensor.detach()
 
     audio_spec_idx = torch.sqrt(audio_spec_idx[0,:,:]**2 + audio_spec_idx[1,:,:]**2) 
     plt.figure(figsize=(10, 4))
-    librosa.display.specshow(librosa.amplitude_to_db(np.abs(audio_spec_idx), ref=np.max),
-                            y_axis='log', x_axis='time', cmap='bwr')
+    librosa.display.specshow(librosa.amplitude_to_db(np.abs(audio_spec_idx), ref=np.max), hop_length=160,
+                            y_axis='log', x_axis='time')
     plt.colorbar(format='%+2.0f dB')
     plt.title('Spectrogram (dB)')
-    plt.savefig('pic_for_debug/audio_spec.jpg', format='jpg')
+    if flag == 'input':
+        plt.savefig('pic_for_debug/audio_spec_input_' + str(epoch) + '.jpg', format='jpg')
+        
+        plt.imshow(frame_idx.permute(1,2,0).numpy())
+        plt.savefig('pic_for_debug/frame.jpg', format='jpg')
+    elif flag == 'output':
+        plt.savefig('pic_for_debug/audio_spec_output_' + str(epoch) + '.jpg', format='jpg')
 
-    plt.imshow(frame_idx.permute(1,2,0).numpy())
-    plt.savefig('pic_for_debug/frame.jpg', format='jpg')
+
     
 def display_val(model, loss_criterion, writer, index, dataset_val):
     losses = []
@@ -78,9 +92,34 @@ def display_val(model, loss_criterion, writer, index, dataset_val):
     writer.add_scalar('data/val_loss', avg_loss, index)
     print('val loss: %.3f' % avg_loss)
     return avg_loss
+
+
+def clear_folder(folder_path):
+    # Check if the folder exists
+    if not os.path.exists(folder_path):
+        print(f"Folder '{folder_path}' does not exist.")
+        return
+
+    # Iterate over the files and subdirectories in the folder
+    for filename in os.listdir(folder_path):
+        file_path = os.path.join(folder_path, filename)
+
+        # Check if it's a file or subdirectory
+        if os.path.isfile(file_path):
+            # If it's a file, remove it
+            os.remove(file_path)
+            print(f"Removed file: {file_path}")
+        elif os.path.isdir(file_path):
+            # If it's a subdirectory, recursively clear its contents and then remove it
+            clear_folder(file_path)
+            os.rmdir(file_path)
+            print(f"Removed directory: {file_path}")
     
 
 if __name__ == '__main__':
+    
+    clear_folder(debug_dir)
+    
     dataset = AudioVisualDataset(audios_dir, frames_dir, gpu_available)
     subset_dataset = Subset(dataset, dataset.train_indices)
     data_loader = DataLoader(
@@ -173,7 +212,7 @@ if __name__ == '__main__':
         if gpu_available:
             torch.cuda.synchronize(device=device)
         for i, data in enumerate(data_loader):
-            
+
                 total_steps += batch_size
 
                 ## forward pass
@@ -222,6 +261,9 @@ if __name__ == '__main__':
 
 
                 if(i % display_freq == 0):
+                    debug_dataset(data, epoch)
+                    debug_dataset(output, epoch, flag='output')
+                    
                     print('Display training progress at (epoch %d, total_steps %d)' % (epoch, total_steps))
                     avg_loss = sum(batch_loss) / len(batch_loss)
                     avg_loss1 = sum(batch_loss1) / len(batch_loss1)

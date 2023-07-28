@@ -20,13 +20,14 @@ else:
     
 frames_dir = "/dsi/gannot-lab2/datasets2/FAIR-Play/frames_30fps/"
 audios_dir = "/dsi/gannot-lab2/datasets2/FAIR-Play/binaural_audios/"
+debug_dir = "/home/dsi/bermanl1/Geometry-Aware-Multi-Task-Learning-for-Binaural-Audio-Generation-from-Video/pic_for_debug"
 batch_size = 64
 batch_size_test = 1
 epochs = 1000
 
 
 lr = 1e-4
-lr_big = 2e-4 
+lr_big = 7e-4 
 
 beta1 = 0.9
 weight_decay = 0.0005 # use for regolization
