@@ -1,7 +1,7 @@
 import os
 import torch
 
-gpu_ids = [5]
+gpu_ids = [4]
 gpu_available = True
 devices = []
 
@@ -27,13 +27,22 @@ epochs = 1000
 
 
 lr = 1e-4
-lr_big = 7e-4 
+lr_big = 1e-3
+lr_decrese_fq = 10
 
 beta1 = 0.9
 weight_decay = 0.0005 # use for regolization
 train_epochs = 1000
-checkpoints_dir = "/home/dsi/bermanl1/CODE/checkpoints/"
-learning_rate_decrease_itr = 10
+loss_choose = "diff"  # channel or diff
+if loss_choose == "diff":
+    checkpoints_dir = "/home/dsi/bermanl1/CODE/checkpoints/"
+    video_path = "/home/dsi/bermanl1/Geometry-Aware-Multi-Task-Learning-for-Binaural-Audio-Generation-from-Video/output_videos"
+    test_spec_path = 'pic_for_test_debug'
+elif loss_choose =="channel":
+    checkpoints_dir = "/home/dsi/bermanl1/CODE/checkpoints2/"
+    video_path = "/home/dsi/bermanl1/Geometry-Aware-Multi-Task-Learning-for-Binaural-Audio-Generation-from-Video/output_videos_loss_channel"
+    test_spec_path = 'pic_for_test_debug_channel_loss'
+
 decay_factor = 0.94
 alpha = 0
 
@@ -53,3 +62,7 @@ lambda_binarual =1
 
 audio_length = 0.63
 audio_sampling_rate = 16000
+spec_debug = False
+debug_test_idx = 10
+
+ffmpeg_path='/home/dsi/bermanl1/anaconda3/envs/new4/bin/ffmpeg'

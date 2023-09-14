@@ -61,6 +61,7 @@ class AudioVisualDataset(Dataset):
         normalize = transforms.Normalize(mean=[0.485, 0.456, 0.406], std=[0.229, 0.224, 0.225])
         vision_transform_list = [transforms.ToTensor(), normalize]
         self.vision_transform = transforms.Compose(vision_transform_list)
+        self.vision_output_transform = transforms.Compose([transforms.PILToTensor()])
         
         # split the data to train, val, test
         total_samples = len([f for f in os.listdir(audio_dir) if os.path.isfile(os.path.join(audio_dir, f))])
@@ -73,7 +74,7 @@ class AudioVisualDataset(Dataset):
         test_samples = total_samples - train_samples - val_samples      
         
         self.train_indices = random.sample(range(total_samples), train_samples)
-        self.val_indices = random.sample(set(range(total_samples)) - set(self.train_indices), val_samples)
+        self.val_indices = random.sample(list(set(range(total_samples)) - set(self.train_indices)), val_samples)
         self.test_indices = list(set(range(total_samples)) - set(self.train_indices) - set(self.val_indices))
 
     def __len__(self):
@@ -192,15 +193,34 @@ class AudioVisualDataset(Dataset):
             video_num = path_parts[-1][:-4]
             
             frames_dir = os.path.join(self.frame_dir, video_num)
-            frame_files = os.listdir(frames_dir)
+            frame_files = sorted(os.listdir(frames_dir))
+            
 
             # Iterate over the frame files and load each frame
             frames = []
+            frames_to_video = []
             for frame_file in frame_files:
                 frame_path = os.path.join(frames_dir, frame_file)
                 # Load frame
-                frame = process_image(Image.open(frame_path).convert('RGB'), augment=False)
-                frame = self.vision_transform(frame)  
-                frames.append(audio)
+                frame = process_image(Image.open(frame_path).convert('RGB'), augment=False).convert('RGB')
                 
-            return {'frames': frames, 'audio_mix': audio_mix, 'audio_channel1': audio_channel1 , 'audio_channel2': audio_channel2}
+                frame_to_video = Image.open(frame_path)
+                frame_to_video = frame_to_video.convert('RGB')
+                frame_to_video = frame_to_video.resize((480, 240))
+                frame_to_video = frame_to_video.convert('RGB')
+                frame_to_video = self.vision_output_transform(frame_to_video)
+                frames_to_video.append(frame_to_video)
+                
+                frame = self.vision_transform(frame)  
+                frames.append(frame)
+                
+            return {'frames': frames, 'audio_mix': audio_mix, 'audio_channel1': audio_channel1 , 'audio_channel2': audio_channel2, "frames_to_video":frames_to_video}
+        
+if __name__ == "__main__":
+    fake_audio_size = int(audio_length * audio_sampling_rate)
+    fake_audio = np.random.rand(fake_audio_size)
+    print(type(fake_audio))
+    fake_audio_spec = generate_spectrogram(fake_audio)
+    print(fake_audio.shape)
+    print(fake_audio_spec.shape)
+    
